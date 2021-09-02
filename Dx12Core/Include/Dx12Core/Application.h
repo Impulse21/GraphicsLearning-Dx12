@@ -1,3 +1,4 @@
+#pragma once
 
 #include "Log.h"
 #include "GLFW/glfw3.h"

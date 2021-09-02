@@ -7,11 +7,18 @@ set(dx12_core_include_files
     Include/Dx12Core/Application.h
     Include/Dx12Core/Log.h
     Include/Dx12Core/Dx12Common.h
-    Include/Dx12Core/d3dx12.h)
+    Include/Dx12Core/d3dx12.h
+    Include/Dx12Core/RefCountPtr.h
+    Include/Dx12Core/Dx12Factory.h
+    Include/Dx12Core/GraphicsDevice.h
+    Include/Dx12Core/Dx12Queue.h)
 
 set(dx12_core_src_files
     Src/Application.cpp
-    Src/Log.cpp)
+    Src/Log.cpp
+    Src/Dx12Factory.cpp
+    Src/GraphicsDevice.cpp
+    Src/Dx12Queue.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}
