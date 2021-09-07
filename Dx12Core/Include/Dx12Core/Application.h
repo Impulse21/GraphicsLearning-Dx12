@@ -5,6 +5,8 @@
 #include <string>
 #include <memory>
 
+#include "GraphicsDevice.h"
+
 namespace Dx12Core
 {
 	using WindowFlags = uint32_t;
@@ -66,12 +68,12 @@ namespace Dx12Core
 		void UpdateWindowSize();
 		void UpdateAvarageFrameTime(double elapsedTime);
 
-		void Present();
-
 	private:
 		static bool sGlwfIsInitialzed;
 		WindowProperties m_windowProperties;
 		GLFWwindow* m_window;
+
+		GraphicsDeviceHandle m_graphicsDevice;
 
 		bool m_isWindowVisible = true;
 

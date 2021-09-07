@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.13)
 project(Dx12Core VERSION 1.0)
 
 set(dx12_core_include_files
+    Include/Dx12Core/Dx12Core.h
     Include/Dx12Core/Application.h
     Include/Dx12Core/Log.h
     Include/Dx12Core/Dx12Common.h
@@ -11,14 +12,18 @@ set(dx12_core_include_files
     Include/Dx12Core/RefCountPtr.h
     Include/Dx12Core/Dx12Factory.h
     Include/Dx12Core/GraphicsDevice.h
-    Include/Dx12Core/Dx12Queue.h)
+    Include/Dx12Core/Dx12Queue.h
+    Include/Dx12Core/Dx12DescriptorHeap.h
+    Include/Dx12Core/Dx12Resources.h)
 
 set(dx12_core_src_files
     Src/Application.cpp
     Src/Log.cpp
     Src/Dx12Factory.cpp
     Src/GraphicsDevice.cpp
-    Src/Dx12Queue.cpp)
+    Src/Dx12Queue.cpp
+    Src/Dx12DescriptorHeap.cpp
+    Src/Dx12Resources.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}

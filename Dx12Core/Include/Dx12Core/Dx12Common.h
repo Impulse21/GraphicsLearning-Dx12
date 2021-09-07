@@ -13,13 +13,28 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <memory>
 
 #include "RefCountPtr.h"
 
 #include "Log.h"
 
+// The min/max macros conflict with like-named member functions.
+// Only use std::min and std::max defined in <algorithm>.
+#if defined(min)
+#undef min
+#endif
+
+#if defined(max)
+#undef max
+#endif
+
+#define INVALID_DESCRIPTOR_INDEX ~0u
+
 namespace Dx12Core
 {
+    typedef uint32_t DescriptorIndex;
+
     inline void ThrowIfFailed(HRESULT hr)
     {
         if (FAILED(hr))
@@ -62,5 +77,14 @@ namespace Dx12Core
         bool IsVariableRateShadingSupported = false;
         bool IsMeshShadingSupported = false;
         bool IsUnderGraphicsDebugger = false;
+    };
+
+    class StaticDescriptorHeap;
+    struct DeviceResources
+    {
+        std::unique_ptr<StaticDescriptorHeap> RenderTargetViewHeap;
+        std::unique_ptr<StaticDescriptorHeap> DepthStencilViewHeap;
+        std::unique_ptr<StaticDescriptorHeap> ShaderResourceViewHeap;
+        std::unique_ptr<StaticDescriptorHeap> SamplerHeap;
     };
 }

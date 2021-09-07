@@ -2,6 +2,11 @@
 #include "Dx12Core/Log.h"
 #include <assert.h>
 
+#include "Dx12Core/Dx12Factory.h"
+
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include "GLFW/glfw3native.h"
+
 using namespace Dx12Core;
 
 
@@ -9,6 +14,7 @@ bool ApplicationDx12Base::sGlwfIsInitialzed = false;;
 
 Dx12Core::ApplicationDx12Base::~ApplicationDx12Base()
 {
+	this->m_graphicsDevice.Reset();
 	this->DestoryApplicationWindow();
 }
 
@@ -16,7 +22,23 @@ void Dx12Core::ApplicationDx12Base::Initialize()
 {
 	this->CreateApplicationWindow(WindowProperties());
 
-	// Create device
+	{
+		GraphicsDeviceDesc desc = {};
+		desc.EnableCopyQueue = true;
+		desc.EnableComputeQueue = true;
+
+		this->m_graphicsDevice = Dx12Factory::GetInstance().CreateGraphicsDevice(desc);
+	}
+
+	{
+		SwapChainDesc desc = {};
+		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		desc.Width = this->m_windowProperties.Width;
+		desc.Height = this->m_windowProperties.Height;
+		desc.WindowHandle = glfwGetWin32Window(this->m_window);
+		this->m_graphicsDevice->InitializeSwapcChain(desc);
+	}
+
 }
 
 void Dx12Core::ApplicationDx12Base::Run()
@@ -33,16 +55,15 @@ void Dx12Core::ApplicationDx12Base::Run()
 		double elapsedTime = currFrameTime - this->m_previousFrameTimestamp;
 
 		// Update Inputs
-
-		// If 
 		if (this->m_isWindowVisible)
 		{
+			this->m_graphicsDevice->BeginFrame();
 			this->Update(elapsedTime);
 			this->Render();
-			this->Present();
+			this->m_graphicsDevice->Present();
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(0));
+		// std::this_thread::sleep_for(std::chrono::milliseconds(0));
 
 
 		this->UpdateAvarageFrameTime(elapsedTime);
@@ -52,7 +73,7 @@ void Dx12Core::ApplicationDx12Base::Run()
 
 void Dx12Core::ApplicationDx12Base::Shutdown()
 {
-	this->DestoryApplicationWindow();
+	// this->DestoryApplicationWindow();
 }
 
 void ApplicationDx12Base::CreateApplicationWindow(WindowProperties properties)
@@ -135,8 +156,4 @@ void Dx12Core::ApplicationDx12Base::UpdateAvarageFrameTime(double elapsedTime)
 		this->m_numberOfAccumulatedFrames = 0;
 		this->m_frameTimeSum = 0.0;
 	}
-}
-
-void Dx12Core::ApplicationDx12Base::Present()
-{
 }
