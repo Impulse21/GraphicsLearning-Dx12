@@ -16,6 +16,82 @@
 
 namespace Dx12Core
 {
+    struct Color
+    {
+        float R;
+        float G;
+        float B;
+        float A;
+
+        Color()
+            : R(0.f), G(0.f), B(0.f), A(0.f)
+        { }
+
+        Color(float c)
+            : R(c), G(c), B(c), A(c)
+        { }
+
+        Color(float r, float g, float b, float a)
+            : R(r), G(g), B(b), A(a) { }
+
+        bool operator ==(const Color& other) const { return R == other.R && G == other.G && B == other.B && A == other.A; }
+        bool operator !=(const Color& other) const { return !(*this == other); }
+    };
+
+    struct Viewport
+    {
+        float MinX, MaxX;
+        float MinY, MaxY;
+        float MinZ, MaxZ;
+
+        Viewport() : MinX(0.f), MaxX(0.f), MinY(0.f), MaxY(0.f), MinZ(0.f), MaxZ(1.f) { }
+
+        Viewport(float width, float height) : MinX(0.f), MaxX(width), MinY(0.f), MaxY(height), MinZ(0.f), MaxZ(1.f) { }
+
+        Viewport(float _minX, float _maxX, float _minY, float _maxY, float _minZ, float _maxZ)
+            : MinX(_minX), MaxX(_maxX), MinY(_minY), MaxY(_maxY), MinZ(_minZ), MaxZ(_maxZ)
+        { }
+
+        bool operator ==(const Viewport& b) const
+        {
+            return MinX == b.MinX
+                && MinY == b.MinY
+                && MinZ == b.MinZ
+                && MaxX == b.MaxX
+                && MaxY == b.MaxY
+                && MaxZ == b.MaxZ;
+        }
+        bool operator !=(const Viewport& b) const { return !(*this == b); }
+
+        float GetWidth() const { return MaxX - MinX; }
+        float GetHeight() const { return MaxY - MinY; }
+    };
+
+    struct Rect
+    {
+        int MinX, MaxX;
+        int MinY, MaxY;
+
+        Rect() : MinX(0), MaxX(0), MinY(0), MaxY(0) { }
+        Rect(int width, int height) : MinX(0), MaxX(width), MinY(0), MaxY(height) { }
+        Rect(int _minX, int _maxX, int _minY, int _maxY) : MinX(_minX), MaxX(_maxX), MinY(_minY), MaxY(_maxY) { }
+        explicit Rect(const Viewport& viewport)
+            : MinX(int(floorf(viewport.MinX)))
+            , MaxX(int(ceilf(viewport.MaxX)))
+            , MinY(int(floorf(viewport.MinY)))
+            , MaxY(int(ceilf(viewport.MaxY)))
+        {
+        }
+
+        bool operator ==(const Rect& b) const {
+            return MinX == b.MinX && MinY == b.MinY && MaxX == b.MaxX && MaxY == b.MaxY;
+        }
+        bool operator !=(const Rect& b) const { return !(*this == b); }
+
+        int GetWidth() const { return MaxX - MinX; }
+        int GetHeight() const { return MaxY - MinY; }
+    };
+
     class IResource
     {
     protected:
@@ -90,6 +166,25 @@ namespace Dx12Core
 
     typedef RefCountPtr<ITexture> TextureHandle;
 
+    class ICommandContext : public IResource
+    {
+    public:
+        virtual ~ICommandContext() = default;
+
+        virtual void Begin() = 0;
+        virtual void Close() = 0;
+
+        virtual void TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) = 0;
+
+        virtual void ClearRenderTarget(ITexture* rexture, Color const& color) = 0;
+
+        virtual void BeginMarker(std::string name) = 0;
+        virtual void EndMarker() = 0;
+
+    };
+
+    typedef RefCountPtr<ICommandContext> CommandContextHandle;
+
     struct GraphicsDeviceDesc
     {
         bool EnableComputeQueue = false;
@@ -120,10 +215,20 @@ namespace Dx12Core
         virtual void BeginFrame() = 0;
         virtual void Present() = 0;
 
+        virtual uint64_t ExecuteContext(ICommandContext* const* contexts, size_t numCommandContexts) = 0;
+
+            // Front-end for executeCommandLists(..., 1) for compatibility and convenience
+        uint64_t ExecuteContext(ICommandContext* context)
+        {
+            return this->ExecuteContext(&context, 1);
+        }
+
         virtual void WaitForIdle() const = 0;
 
     public:
         virtual TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native) = 0;
+
+        virtual CommandContextHandle CreateGfxContext() = 0;
 
     public:
         virtual const GraphicsDeviceDesc& GetDesc() const = 0;

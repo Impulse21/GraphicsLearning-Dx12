@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Dx12Core/Dx12Common.h"
+#include "Dx12CommandAllocatorPool.h"
 
 namespace Dx12Core
 {
+	class ICommandContext;
 	class Dx12Queue
 	{
 	public:
@@ -21,11 +23,15 @@ namespace Dx12Core
 
 		ID3D12CommandQueue* GetNative() { return this->m_queueDx12.Get(); }
 
+		uint64_t GetLastCompletedFence() const { std::scoped_lock _(this->m_fenceMutex); return this->m_lastCompletedFenceValue; }
+
 	private:
 		const Dx12Context& m_context;
 		const D3D12_COMMAND_LIST_TYPE m_type;
 		RefCountPtr<ID3D12CommandQueue> m_queueDx12;
 		RefCountPtr<ID3D12Fence> m_fence;
+
+		CommandAllocatorPool m_allocatorPool;
 
 		uint64_t m_nextFenceValue;
 		uint64_t m_lastCompletedFenceValue;

@@ -6,17 +6,10 @@
 #include "Dx12Common.h"
 #include "Dx12Resources.h"
 
+#define MAX_COMMAND_CONTEXT 30 // According to Nvida, this is good.
+
 namespace Dx12Core
 {
-	enum class CommandQueue : uint8_t
-	{
-		Graphics = 0,
-		Compute,
-		Copy,
-
-		Count
-	};
-
 	class Dx12Queue;
 	class GraphicsDevice : public RefCounter<IGraphicsDevice>
 	{
@@ -28,6 +21,8 @@ namespace Dx12Core
 
 		void BeginFrame();
 		void Present();
+
+		uint64_t ExecuteContext(ICommandContext* const* contexts, size_t numCommandContexts) override;
 
 		void WaitForIdle() const;
 
@@ -42,11 +37,12 @@ namespace Dx12Core
 		uint32_t GetBackBuffer(uint32_t index) { return 1; };
 		uint32_t GetCurrentBackBufferIndex() { assert(this->m_swapChain); return this->m_swapChain->GetCurrentBackBufferIndex(); }
 
-	private:
-		void InitializeRenderTargets();
+		Dx12Queue* GetGfxQueue() { return this->m_queues[static_cast<size_t>(CommandQueue::Graphics)].get(); }
+
+		const Dx12Context& GetDx12Context() const { return this->m_context; }
 
 	private:
-		Dx12Queue* GetGfxQueue() { return this->m_queues[static_cast<size_t>(CommandQueue::Graphics)].get(); }
+		void InitializeRenderTargets();
 
 	private:
 		const Dx12Context m_context;
@@ -60,6 +56,10 @@ namespace Dx12Core
 		std::array<std::unique_ptr<Dx12Queue>, static_cast<size_t>(CommandQueue::Count)> m_queues;
 		std::vector<TextureHandle> m_swapChainTextures;
 		std::vector<uint64_t> m_frameFence;
+
+		std::vector<std::array<RefCountPtr<CommandContext>, MAX_COMMAND_CONTEXT>> m_commandContexts;
+
+		std::vector<ID3D12CommandList*> m_commandListsToExecute; // used to avoid re-allocations;
 	};
 }
 

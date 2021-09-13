@@ -71,6 +71,8 @@ void Dx12Core::GraphicsDevice::InitializeSwapcChain(SwapChainDesc const& swapCha
 
 	this->m_swapChainDesc = swapChainDesc;
 	this->InitializeRenderTargets();
+
+	this->m_commandContexts.resize(this->m_swapChainDesc.NumBuffers);
 }
 
 void Dx12Core::GraphicsDevice::BeginFrame()
@@ -86,6 +88,26 @@ void Dx12Core::GraphicsDevice::Present()
 	this->m_swapChain->Present(0, 0);
 
 	this->m_frameFence[this->GetCurrentBackBufferIndex()] = this->GetGfxQueue()->IncrementFence();
+}
+
+uint64_t Dx12Core::GraphicsDevice::ExecuteContext(ICommandContext* const* contexts, size_t numCommandContexts)
+{
+	this->m_commandListsToExecute.resize(numCommandContexts);
+	for (size_t i = 0; i < numCommandContexts; i++)
+	{
+		this->m_commandListsToExecute[i] = SafeCast<CommandContext*>(contexts[i])->GetNative();
+	}
+
+	this->GetGfxQueue()->GetNative()->ExecuteCommandLists(this->m_commandListsToExecute.size(), this->m_commandListsToExecute.data());
+	uint64_t fenceValue = this->GetGfxQueue()->IncrementFence();
+
+	for (size_t i = 0; i < numCommandContexts; i++)
+	{
+		SafeCast<CommandContext*>(contexts[i])->Executed(fenceValue);
+	}
+
+	// Dispose
+	return fenceValue;
 }
 
 void Dx12Core::GraphicsDevice::WaitForIdle() const
@@ -106,6 +128,12 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTextureFromNative(TextureDesc desc
 	texture->CreateViews();
 
 	return TextureHandle::Create(texture.release());
+}
+
+CommandContextHandle Dx12Core::GraphicsDevice::CreateGfxContext()
+{
+	CommandContext* context = new CommandContext(this);
+	return CommandContextHandle::Create(context);
 }
 
 void Dx12Core::GraphicsDevice::InitializeRenderTargets()

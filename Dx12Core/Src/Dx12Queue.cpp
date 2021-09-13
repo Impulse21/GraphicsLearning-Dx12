@@ -1,10 +1,13 @@
 #include "Dx12Core/Dx12Queue.h"
 
+#include "Dx12Core/Dx12Resources.h"
+
 using namespace Dx12Core;
 
 Dx12Queue::Dx12Queue(Dx12Context const& context, D3D12_COMMAND_LIST_TYPE type)
 	: m_context(context)
 	, m_type(type)
+	, m_allocatorPool(context.Device2, type)
 {
 	// Create Command Queue
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};

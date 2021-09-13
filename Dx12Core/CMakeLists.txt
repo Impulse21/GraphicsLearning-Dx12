@@ -14,7 +14,8 @@ set(dx12_core_include_files
     Include/Dx12Core/GraphicsDevice.h
     Include/Dx12Core/Dx12Queue.h
     Include/Dx12Core/Dx12DescriptorHeap.h
-    Include/Dx12Core/Dx12Resources.h)
+    Include/Dx12Core/Dx12Resources.h
+    Include/Dx12Core/Dx12CommandAllocatorPool.h)
 
 set(dx12_core_src_files
     Src/Application.cpp
@@ -23,7 +24,8 @@ set(dx12_core_src_files
     Src/GraphicsDevice.cpp
     Src/Dx12Queue.cpp
     Src/Dx12DescriptorHeap.cpp
-    Src/Dx12Resources.cpp)
+    Src/Dx12Resources.cpp
+    Src/Dx12CommandAllocatorPool.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}
