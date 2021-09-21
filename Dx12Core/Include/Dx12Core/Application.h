@@ -1,11 +1,14 @@
 #pragma once
 
+#include "Dx12Core/Dx12Core.h"
+
 #include "Log.h"
 #include "GLFW/glfw3.h"
 #include <string>
 #include <memory>
 
-#include "GraphicsDevice.h"
+#include "Dx12Core/Dx12Factory.h"
+
 
 namespace Dx12Core
 {
@@ -48,19 +51,22 @@ namespace Dx12Core
 		{}
 	};
 
+	class IGraphicsDevice;
 	class ApplicationDx12Base
 	{
 	public:
 		ApplicationDx12Base() = default;
 		virtual ~ApplicationDx12Base();
 
-		void Initialize();
+		void Initialize(IGraphicsDevice* graphicsDevice);
 		void Run();
 		void Shutdown();
 
 	protected:
 		virtual void Update(double elapsedTime) = 0;
 		virtual void Render() = 0;
+
+		IGraphicsDevice* GetDevice() { return this->m_graphicsDevice; }
 
 	private:
 		void CreateApplicationWindow(WindowProperties properties);
@@ -73,7 +79,7 @@ namespace Dx12Core
 		WindowProperties m_windowProperties;
 		GLFWwindow* m_window;
 
-		GraphicsDeviceHandle m_graphicsDevice;
+		IGraphicsDevice* m_graphicsDevice;
 
 		bool m_isWindowVisible = true;
 
@@ -90,13 +96,23 @@ namespace Dx12Core
 
 #define MAIN_FUNCTION() int main()
 
-#define CREATE_APPLICATION( app_Class ) \
-	MAIN_FUNCTION() \
-	{ \
-	   Dx12Core::Log::Initialize(); \
-       std::unique_ptr<Dx12Core::ApplicationDx12Base> app = std::make_unique<app_Class>(); \
-	   app->Initialize(); \
-	   app->Run(); \
-	   app->Shutdown(); \
-	   return 0; \
-	}
+#define CREATE_APPLICATION( app_Class )																	\
+	MAIN_FUNCTION()																						\
+	{																									\
+	   Dx12Core::Log::Initialize();																		\
+																										\
+	   GraphicsDeviceDesc desc = {};																	\
+	   desc.EnableCopyQueue = true;																		\
+	   desc.EnableComputeQueue = true;																	\
+																										\
+	   auto graphicsDevice = Dx12Factory::GetInstance().CreateGraphicsDevice(desc);						\
+       {																								\
+			std::unique_ptr<Dx12Core::ApplicationDx12Base> app = std::make_unique<app_Class>();			\
+			app->Initialize(graphicsDevice);															\
+			app->Run();																					\
+			app->Shutdown();																			\
+	   } \
+		graphicsDevice.Reset();\
+		Dx12Factory::GetInstance().ReportLiveObjects();													\
+	   return 0;																						\
+	}																									\

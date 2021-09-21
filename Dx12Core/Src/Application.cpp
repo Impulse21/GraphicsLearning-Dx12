@@ -2,8 +2,6 @@
 #include "Dx12Core/Log.h"
 #include <assert.h>
 
-#include "Dx12Core/Dx12Factory.h"
-
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include "GLFW/glfw3native.h"
 
@@ -14,21 +12,14 @@ bool ApplicationDx12Base::sGlwfIsInitialzed = false;;
 
 Dx12Core::ApplicationDx12Base::~ApplicationDx12Base()
 {
-	this->m_graphicsDevice.Reset();
 	this->DestoryApplicationWindow();
 }
 
-void Dx12Core::ApplicationDx12Base::Initialize()
+void Dx12Core::ApplicationDx12Base::Initialize(IGraphicsDevice* graphicsDevice)
 {
 	this->CreateApplicationWindow(WindowProperties());
 
-	{
-		GraphicsDeviceDesc desc = {};
-		desc.EnableCopyQueue = true;
-		desc.EnableComputeQueue = true;
-
-		this->m_graphicsDevice = Dx12Factory::GetInstance().CreateGraphicsDevice(desc);
-	}
+	this->m_graphicsDevice = graphicsDevice;
 
 	{
 		SwapChainDesc desc = {};

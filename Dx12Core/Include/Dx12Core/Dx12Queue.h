@@ -13,7 +13,9 @@ namespace Dx12Core
 		~Dx12Queue();
 
 		D3D12_COMMAND_LIST_TYPE GetType() const { return this->m_type; }
-		
+
+		uint64_t ExecuteCommandLists(std::vector<ID3D12CommandList*> const& commandLists);
+
 		uint64_t IncrementFence();
 		bool IsFenceComplete(uint64_t fenceValue);
 		void WaitForFence(uint64_t fenceValue);
@@ -23,7 +25,7 @@ namespace Dx12Core
 
 		ID3D12CommandQueue* GetNative() { return this->m_queueDx12.Get(); }
 
-		uint64_t GetLastCompletedFence() const { std::scoped_lock _(this->m_fenceMutex); return this->m_lastCompletedFenceValue; }
+		uint64_t GetLastCompletedFence();
 
 	private:
 		const Dx12Context& m_context;

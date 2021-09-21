@@ -15,8 +15,8 @@
 #include <sstream>
 #include <memory>
 
-#include "RefCountPtr.h"
 
+#include "RefCountPtr.h"
 #include "Log.h"
 
 // The min/max macros conflict with like-named member functions.
@@ -77,15 +77,6 @@ namespace Dx12Core
         bool IsVariableRateShadingSupported = false;
         bool IsMeshShadingSupported = false;
         bool IsUnderGraphicsDebugger = false;
-    };
-
-    class StaticDescriptorHeap;
-    struct DeviceResources
-    {
-        std::unique_ptr<StaticDescriptorHeap> RenderTargetViewHeap;
-        std::unique_ptr<StaticDescriptorHeap> DepthStencilViewHeap;
-        std::unique_ptr<StaticDescriptorHeap> ShaderResourceViewHeap;
-        std::unique_ptr<StaticDescriptorHeap> SamplerHeap;
     };
 
     // A type cast that is safer than static_cast in debug builds, and is a simple static_cast in release builds.

@@ -1,7 +1,5 @@
 #include "Dx12Core/Dx12Queue.h"
 
-#include "Dx12Core/Dx12Resources.h"
-
 using namespace Dx12Core;
 
 Dx12Queue::Dx12Queue(Dx12Context const& context, D3D12_COMMAND_LIST_TYPE type)
@@ -51,6 +49,13 @@ Dx12Queue::~Dx12Queue()
 	CloseHandle(this->m_fenceEvent);
 }
 
+uint64_t Dx12Core::Dx12Queue::ExecuteCommandLists(std::vector<ID3D12CommandList*> const& commandLists)
+{
+	this->m_queueDx12->ExecuteCommandLists(commandLists.size(), commandLists.data());
+
+	return this->IncrementFence();
+}
+
 uint64_t Dx12Queue::IncrementFence()
 {
 	std::scoped_lock _(this->m_fenceMutex);
@@ -92,4 +97,10 @@ void Dx12Queue::WaitForFence(uint64_t fenceValue)
 
 		LOG_CORE_INFO("Waiting Finished");
 	}
+}
+
+uint64_t Dx12Core::Dx12Queue::GetLastCompletedFence()
+{
+	std::scoped_lock _(this->m_fenceMutex);
+	return this->m_lastCompletedFenceValue;
 }

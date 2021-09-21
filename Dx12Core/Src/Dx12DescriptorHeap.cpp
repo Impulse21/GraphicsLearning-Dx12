@@ -1,4 +1,4 @@
-#include "Dx12Core/Dx12DescriptorHeap.h"
+#include "Dx12DescriptorHeap.h"
 
 using namespace Dx12Core;
 
@@ -28,14 +28,19 @@ StaticDescriptorHeap::StaticDescriptorHeap(
 	this->m_descriptorIndexPool = { numDescriptorsInHeap };
 }
 
-DescriptorIndex Dx12Core::StaticDescriptorHeap::AllocateDescriptor()
+DescriptorAllocation Dx12Core::StaticDescriptorHeap::AllocateDescriptor()
 {
-	return this->m_descriptorIndexPool.Allocate();
+	auto descriptorIndex = this->m_descriptorIndexPool.Allocate();
+	return DescriptorAllocation(
+		this->GetCpuHandle(descriptorIndex),
+		this->GetGpuHandle(descriptorIndex),
+		descriptorIndex,
+		this);
 }
 
-void Dx12Core::StaticDescriptorHeap::Release(DescriptorIndex index)
+void Dx12Core::StaticDescriptorHeap::Release(DescriptorAllocation&& allocation)
 {
-	this->m_descriptorIndexPool.Release(index);
+	this->m_descriptorIndexPool.Release(allocation.GetIndex());
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE Dx12Core::StaticDescriptorHeap::GetCpuHandle(DescriptorIndex index)
@@ -45,7 +50,6 @@ D3D12_CPU_DESCRIPTOR_HANDLE Dx12Core::StaticDescriptorHeap::GetCpuHandle(Descrip
 
 D3D12_GPU_DESCRIPTOR_HANDLE Dx12Core::StaticDescriptorHeap::GetGpuHandle(DescriptorIndex index)
 {
-	assert(this->IsShaderVisible());
 	if (!this->IsShaderVisible())
 	{
 		return this->m_gpuStartHandle;

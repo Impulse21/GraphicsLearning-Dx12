@@ -2,8 +2,11 @@
 
 #include "Dx12Core/Dx12Common.h"
 
+#include "DescriptorAllocation.h"
+
 namespace Dx12Core
 {
+
 	class StaticDescriptorHeap
 	{
 	public:
@@ -18,11 +21,11 @@ namespace Dx12Core
 
 		bool IsShaderVisible() const { return this->m_isShaderVisible; }
 
-		DescriptorIndex AllocateDescriptor();
-		void Release(DescriptorIndex index);
+		DescriptorAllocation AllocateDescriptor();
+		void Release(DescriptorAllocation&& allocation);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(DescriptorIndex index);
-		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(DescriptorIndex index);
+		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(DescriptorIndex index = 0);
+		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(DescriptorIndex index = 0);
 
 	private:
 		struct DescriptorIndexPool

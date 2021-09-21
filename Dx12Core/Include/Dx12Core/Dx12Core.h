@@ -6,6 +6,8 @@
 
 #include "RefCountPtr.h"
 
+#include "ResourceId.h"
+
 #define ENUM_CLASS_FLAG_OPERATORS(T) \
     inline T operator | (T a, T b) { return T(uint32_t(a) | uint32_t(b)); } \
     inline T operator & (T a, T b) { return T(uint32_t(a) & uint32_t(b)); } /* NOLINT(bugprone-macro-parentheses) */ \
@@ -166,25 +168,6 @@ namespace Dx12Core
 
     typedef RefCountPtr<ITexture> TextureHandle;
 
-    class ICommandContext : public IResource
-    {
-    public:
-        virtual ~ICommandContext() = default;
-
-        virtual void Begin() = 0;
-        virtual void Close() = 0;
-
-        virtual void TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) = 0;
-
-        virtual void ClearRenderTarget(ITexture* rexture, Color const& color) = 0;
-
-        virtual void BeginMarker(std::string name) = 0;
-        virtual void EndMarker() = 0;
-
-    };
-
-    typedef RefCountPtr<ICommandContext> CommandContextHandle;
-
     struct GraphicsDeviceDesc
     {
         bool EnableComputeQueue = false;
@@ -205,6 +188,21 @@ namespace Dx12Core
         HWND WindowHandle = nullptr;
     };
 
+    class ICommandContext : public IResource
+    {
+    public:
+        virtual ~ICommandContext() = default;
+
+        virtual void TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) = 0;
+
+        virtual void ClearTextureFloat(ITexture* texture, Color const& clearColour) = 0;
+
+        virtual void BeginMarker(std::string name) = 0;
+        virtual void EndMarker() = 0;
+
+    };
+    typedef RefCountPtr<ICommandContext> CommandContextHandle;
+
     class IGraphicsDevice : public IResource
     {
     public:
@@ -215,30 +213,25 @@ namespace Dx12Core
         virtual void BeginFrame() = 0;
         virtual void Present() = 0;
 
-        virtual uint64_t ExecuteContext(ICommandContext* const* contexts, size_t numCommandContexts) = 0;
-
-            // Front-end for executeCommandLists(..., 1) for compatibility and convenience
-        uint64_t ExecuteContext(ICommandContext* context)
-        {
-            return this->ExecuteContext(&context, 1);
-        }
+        virtual ICommandContext& BeginContext() = 0;
+        virtual uint64_t Submit() = 0;
 
         virtual void WaitForIdle() const = 0;
 
     public:
         virtual TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native) = 0;
 
-        virtual CommandContextHandle CreateGfxContext() = 0;
-
     public:
         virtual const GraphicsDeviceDesc& GetDesc() const = 0;
         virtual const SwapChainDesc& GetCurrentSwapChainDesc() const = 0;
 
-        virtual uint32_t GetCurrentBackBuffer() = 0;
-        virtual uint32_t GetBackBuffer(uint32_t index) = 0;
+        virtual ITexture* GetCurrentBackBuffer() = 0;
+        virtual ITexture* GetBackBuffer(uint32_t index) = 0;
         virtual uint32_t GetCurrentBackBufferIndex() = 0;
+
     };
 
+    // TODO - make this more clear
     typedef RefCountPtr<IGraphicsDevice> GraphicsDeviceHandle;
 
 }

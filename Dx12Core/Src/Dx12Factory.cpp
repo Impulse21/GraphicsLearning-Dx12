@@ -1,5 +1,7 @@
 #include"Dx12Core/Dx12Factory.h"
 
+#include "Dx12Core/GraphicsDevice.h"
+
 #define _KB(x) ((size_t) (x) << 10)
 #define _MB(x) ((size_t) (x) << 20)
 #define _GB(x) ((size_t) (x) << 30)
@@ -27,9 +29,11 @@ std::vector<RefCountPtr<IDXGIAdapter1>> Dx12Core::Dx12Factory::EnumerateAdapters
 {
 	std::vector<RefCountPtr<IDXGIAdapter1>> adapters;
 
+	auto factory = this->CreateFactory();
+
 	auto nextAdapter = [&](uint32_t adapterIndex, RefCountPtr<IDXGIAdapter1>& adapter)
 	{
-		return this->m_dxgiFactory->EnumAdapterByGpuPreference(
+		return factory->EnumAdapterByGpuPreference(
 			adapterIndex,
 			DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
 			IID_PPV_ARGS(&adapter));
@@ -108,6 +112,7 @@ Dx12Context Dx12Core::Dx12Factory::CreateContext()
 			context.GpuAdapter,
 			D3D_FEATURE_LEVEL_11_1,
 			IID_PPV_ARGS(&context.Device)));
+
 	/* TODO FIX ME
 	RefCountPtr<IUnknown> renderdoc;
 	if (SUCCEEDED(DXGIGetDebugInterface1(0, RenderdocUUID, &renderdoc)))
@@ -194,7 +199,7 @@ Dx12Context Dx12Core::Dx12Factory::CreateContext()
 		}
 	}
 
-	context.Factory = this->m_dxgiFactory;
+	context.Factory = this->CreateFactory();
 	return context;
 }
 
@@ -205,7 +210,23 @@ GraphicsDeviceHandle Dx12Core::Dx12Factory::CreateGraphicsDevice(GraphicsDeviceD
 	return GraphicsDeviceHandle::Create(device.release());
 }
 
-Dx12Core::Dx12Factory::Dx12Factory()
+void Dx12Core::Dx12Factory::ReportLiveObjects()
+{
+	static const bool debugEnabled = IsDebuggerPresent();
+
+	if (debugEnabled)
+	{
+		RefCountPtr<IDXGIDebug1> debugController;
+		ThrowIfFailed(
+			DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debugController)));
+
+		debugController->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_SUMMARY | DXGI_DEBUG_RLO_DETAIL| DXGI_DEBUG_RLO_IGNORE_INTERNAL));
+
+		LOG_CORE_INFO("Reporting live objects. See output window for more info");
+	}
+}
+
+RefCountPtr<IDXGIFactory6> Dx12Core::Dx12Factory::CreateFactory()
 {
 	uint32_t flags = 0;
 	static const bool debugEnabled = IsDebuggerPresent();
@@ -220,6 +241,9 @@ Dx12Core::Dx12Factory::Dx12Factory()
 		flags = DXGI_CREATE_FACTORY_DEBUG;
 	}
 
+	RefCountPtr<IDXGIFactory6> factory;
 	ThrowIfFailed(
-		CreateDXGIFactory2(flags, IID_PPV_ARGS(&this->m_dxgiFactory)));
+		CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+
+	return factory;
 }

@@ -1,7 +1,8 @@
 #pragma once
 
+#include "Dx12Core.h"
+
 #include "Dx12Common.h"
-#include "Dx12Core/GraphicsDevice.h"
 
 namespace Dx12Core
 {
@@ -22,12 +23,13 @@ namespace Dx12Core
 
 		GraphicsDeviceHandle CreateGraphicsDevice(GraphicsDeviceDesc const& desc);
 
+		void ReportLiveObjects();
+
 	protected:
-		Dx12Factory();
+		Dx12Factory() = default;
 		~Dx12Factory() = default;
 
-	private:
-		RefCountPtr<IDXGIFactory6> m_dxgiFactory;
+		RefCountPtr<IDXGIFactory6> CreateFactory();
 	};
 }
 
