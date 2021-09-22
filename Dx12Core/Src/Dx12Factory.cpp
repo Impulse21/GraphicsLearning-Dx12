@@ -36,7 +36,7 @@ std::vector<RefCountPtr<IDXGIAdapter1>> Dx12Core::Dx12Factory::EnumerateAdapters
 		return factory->EnumAdapterByGpuPreference(
 			adapterIndex,
 			DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
-			IID_PPV_ARGS(&adapter));
+			IID_PPV_ARGS(adapter.ReleaseAndGetAddressOf()));
 	};
 
 	RefCountPtr<IDXGIAdapter1> adapter;
@@ -203,11 +203,16 @@ Dx12Context Dx12Core::Dx12Factory::CreateContext()
 	return context;
 }
 
-GraphicsDeviceHandle Dx12Core::Dx12Factory::CreateGraphicsDevice(GraphicsDeviceDesc const& desc)
+GraphicsDeviceHandle Dx12Core::Dx12Factory::CreateGraphicsDevice(GraphicsDeviceDesc const& desc, Dx12Context& context)
 {
-	std::unique_ptr<GraphicsDevice> device = std::make_unique<GraphicsDevice>(desc, this->CreateContext());
+	std::unique_ptr<GraphicsDevice> device = std::make_unique<GraphicsDevice>(desc, context);
 
 	return GraphicsDeviceHandle::Create(device.release());
+}
+
+GraphicsDeviceHandle Dx12Core::Dx12Factory::CreateGraphicsDevice(GraphicsDeviceDesc const& desc)
+{
+	return this->CreateGraphicsDevice(desc, this->CreateContext());
 }
 
 void Dx12Core::Dx12Factory::ReportLiveObjects()

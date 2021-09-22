@@ -15,31 +15,10 @@ protected:
 };
 
 
-// CREATE_APPLICATION(TriangleApp)
-
-int main()
-{
-	Dx12Core::Log::Initialize();
-
-	GraphicsDeviceDesc desc = {};
-	desc.EnableCopyQueue = true;
-	desc.EnableComputeQueue = true;
-
-	auto graphicsDevice = Dx12Factory::GetInstance().CreateGraphicsDevice(desc);
-	{
-		std::unique_ptr<Dx12Core::ApplicationDx12Base> app = std::make_unique<TriangleApp>();
-		app->Initialize(graphicsDevice);
-		app->Run();
-		app->Shutdown();
-	}
-	graphicsDevice.Reset();
-	Dx12Factory::GetInstance().ReportLiveObjects();
-	return 0;
-}
+CREATE_APPLICATION(TriangleApp)
 
 void TriangleApp::Render()
 {
-	/*
 	ICommandContext& gfxContext = this->GetDevice()->BeginContext();
 
 	ITexture* backBuffer = this->GetDevice()->GetCurrentBackBuffer();
@@ -51,5 +30,4 @@ void TriangleApp::Render()
 	gfxContext.TransitionBarrier(backBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 	this->GetDevice()->Submit();
-	*/
 }

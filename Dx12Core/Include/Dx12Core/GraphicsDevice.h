@@ -28,7 +28,7 @@ namespace Dx12Core
 	class GraphicsDevice : public RefCounter<IGraphicsDevice>
 	{
 	public:
-		GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context context);
+		GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& context);
 		~GraphicsDevice() override;
 
 		void InitializeSwapcChain(SwapChainDesc const& swapChainDesc) override;
@@ -69,7 +69,7 @@ namespace Dx12Core
 		Frame& GetCurrentFrame() { return this->m_frames[this->m_frame]; }
 
 	private:
-		const Dx12Context m_context;
+		Dx12Context m_context;
 		const GraphicsDeviceDesc m_desc;
 
 		std::unique_ptr<StaticDescriptorHeap> m_renderTargetViewHeap;

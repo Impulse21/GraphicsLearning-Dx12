@@ -4,8 +4,8 @@
 
 using namespace Dx12Core;
 
-Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context context)
-	: m_context(std::move(context))
+Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& context)
+	: m_context(context)
 	, m_desc(std::move(desc))
 {
 	this->m_queues[static_cast<size_t>(CommandQueue::Graphics)] 
@@ -35,6 +35,10 @@ Dx12Core::GraphicsDevice::~GraphicsDevice()
 	this->WaitForIdle();
 
 	this->m_swapChainTextures.clear();
+
+	this->m_context.Device5.Reset();
+	this->m_context.Device2.Reset();
+	this->m_context.Device.Reset();
 }
 
 void Dx12Core::GraphicsDevice::InitializeSwapcChain(SwapChainDesc const& swapChainDesc)

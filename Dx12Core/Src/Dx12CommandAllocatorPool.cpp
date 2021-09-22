@@ -38,15 +38,18 @@ ID3D12CommandAllocator* CommandAllocatorPool::RequestAllocator(uint64_t complete
 
 	if (!pAllocator)
 	{
+		RefCountPtr<ID3D12CommandAllocator> newAllocator;
 		ThrowIfFailed(
 			this->m_device->CreateCommandAllocator(
 				this->m_type,
-				IID_PPV_ARGS(&pAllocator)));
+				IID_PPV_ARGS(&newAllocator)));
 
+		// TODO: RefCountPtr is leaky
 		wchar_t allocatorName[32];
 		swprintf(allocatorName, 32, L"CommandAllocator %zu", this->Size());
-		pAllocator->SetName(allocatorName);
-		this->m_allocatorPool.emplace_back(pAllocator);
+		newAllocator->SetName(allocatorName);
+		this->m_allocatorPool.emplace_back(newAllocator);
+		pAllocator = this->m_allocatorPool.back();
 	}
 
 	return pAllocator;

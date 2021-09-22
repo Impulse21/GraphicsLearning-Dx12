@@ -21,6 +21,7 @@ namespace Dx12Core
 
 		Dx12Context CreateContext();
 
+		GraphicsDeviceHandle CreateGraphicsDevice(GraphicsDeviceDesc const& desc, Dx12Context& context);
 		GraphicsDeviceHandle CreateGraphicsDevice(GraphicsDeviceDesc const& desc);
 
 		void ReportLiveObjects();
