@@ -37,6 +37,9 @@ Dx12Queue::Dx12Queue(Dx12Context const& context, D3D12_COMMAND_LIST_TYPE type)
 
 	this->m_fenceEvent = ::CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(m_fenceEvent && "Failed to create fence event handle.");
+
+	this->m_lastCompletedFenceValue = this->m_fence->GetCompletedValue();
+	this->m_nextFenceValue = this->m_lastCompletedFenceValue + 1;
 }
 
 Dx12Queue::~Dx12Queue()

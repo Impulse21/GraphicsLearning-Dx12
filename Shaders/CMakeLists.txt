@@ -10,12 +10,15 @@ set(shader_source_vs
 set(shader_source_ps
     Src/TrianglePS.hlsl)
 
-set(shader_source_includes)
+set(shader_source_includes
+    Include/Shaders/TriangleVS_compiled.h
+    Include/Shaders/TrianglePS_compiled.h)
 
-set_source_files_properties(${shader_source_vs} PROPERTIES VS_SHADER_FLAGS "/Fh \"../Shaders/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\"" VS_SHADER_TYPE Vertex VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-set_source_files_properties(${shader_source_ps} PROPERTIES VS_SHADER_FLAGS "/Fh \"../Shaders/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\"" VS_SHADER_TYPE Pixel  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+set_source_files_properties(${shader_source_vs} PROPERTIES VS_SHADER_FLAGS "/Fh \"${PROJECT_SOURCE_DIR}/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\"" VS_SHADER_TYPE Vertex VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+set_source_files_properties(${shader_source_ps} PROPERTIES VS_SHADER_FLAGS "/Fh \"${PROJECT_SOURCE_DIR}/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\"" VS_SHADER_TYPE Pixel  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
 
 add_library(Shaders INTERFACE 
     ${shader_source_vs}
     ${shader_source_ps}
     ${shader_source_includes})
+    

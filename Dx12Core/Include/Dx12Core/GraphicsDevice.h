@@ -37,25 +37,32 @@ namespace Dx12Core
 		void Present();
 
 		ICommandContext& BeginContext() override;
-		uint64_t Submit() override;
+		uint64_t Submit(bool waitForCompletion = false) override;
 
 		void WaitForIdle() const;
 
 	public:
-		TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native);
+		TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native) override;
+		BufferHandle CreateBuffer(BufferDesc desc) override;
+
+		ShaderHandle CreateShader(ShaderDesc const& desc, const void* binary, size_t binarySize) override;
+		GraphicsPipelineHandle CreateGraphicPipeline(GraphicsPipelineDesc desc) override;
 
 	public:
 		const GraphicsDeviceDesc& GetDesc() const override { return this->m_desc; }
 		const SwapChainDesc& GetCurrentSwapChainDesc() const override { return this->m_swapChainDesc; }
 
-		ITexture* GetCurrentBackBuffer() override { return this->GetBackBuffer(this->GetCurrentBackBufferIndex()); }
-		ITexture* GetBackBuffer(uint32_t index) override { return this->m_swapChainTextures[index]; };
+		TextureHandle GetCurrentBackBuffer() override { return this->GetBackBuffer(this->GetCurrentBackBufferIndex()); }
+		TextureHandle GetBackBuffer(uint32_t index) override { return this->m_swapChainTextures[index]; };
 		uint32_t GetCurrentBackBufferIndex() { assert(this->m_swapChain); return this->m_swapChain->GetCurrentBackBufferIndex(); }
 
 	public:
 		Dx12Queue* GetGfxQueue() { return this->m_queues[static_cast<size_t>(CommandQueue::Graphics)].get(); }
 
 		const Dx12Context& GetDx12Context() const { return this->m_context; }
+
+	private:
+		RefCountPtr<ID3D12RootSignature> CreateRootSignature(RootSignatureDesc& desc);
 
 	private:
 		struct Frame
@@ -83,9 +90,9 @@ namespace Dx12Core
 
 		std::vector<Frame> m_frames;
 		std::array<std::unique_ptr<Dx12CommandContext>, MAX_COMMAND_CONTEXT> m_commandContexts;
-		uint8_t m_activeContext{ 0 };
+		uint8_t m_activeContext = 0;
 
-		uint8_t m_frame = 0.0f;
+		uint8_t m_frame = 0;
 
 		std::array<std::unique_ptr<Dx12Queue>, static_cast<size_t>(CommandQueue::Count)> m_queues;
 		std::vector<TextureHandle> m_swapChainTextures;

@@ -7,8 +7,6 @@ project(UnitTests VERSION 1.0)
 add_executable(TriangleApp Src/Triangle.cpp)
 
 target_link_libraries(TriangleApp d3d12.lib dxgi.lib Shaders Dx12Core)
-target_include_directories(TriangleApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui)
-
-
+target_include_directories(TriangleApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include)
 
 set_target_properties(TriangleApp PROPERTIES FOLDER "UnitTests")

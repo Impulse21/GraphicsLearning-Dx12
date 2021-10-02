@@ -35,8 +35,8 @@ namespace Dx12Core
 
 		CommandAllocatorPool m_allocatorPool;
 
-		uint64_t m_nextFenceValue;
-		uint64_t m_lastCompletedFenceValue;
+		uint64_t m_nextFenceValue = 0;
+		uint64_t m_lastCompletedFenceValue = 0;
 
 		std::mutex m_fenceMutex;
 		std::mutex m_eventMutex;

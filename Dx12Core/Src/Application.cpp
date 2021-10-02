@@ -36,6 +36,7 @@ void Dx12Core::ApplicationDx12Base::Run()
 {
 	this->m_previousFrameTimestamp = glfwGetTime();
 
+	this->LoadContent();
 	while (!glfwWindowShouldClose(this->m_window))
 	{
 		glfwPollEvents();
@@ -64,7 +65,7 @@ void Dx12Core::ApplicationDx12Base::Run()
 
 void Dx12Core::ApplicationDx12Base::Shutdown()
 {
-	// this->DestoryApplicationWindow();
+	this->GetDevice()->WaitForIdle();
 }
 
 void ApplicationDx12Base::CreateApplicationWindow(WindowProperties properties)

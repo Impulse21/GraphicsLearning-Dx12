@@ -63,6 +63,7 @@ namespace Dx12Core
 		void Shutdown();
 
 	protected:
+		virtual void LoadContent() = 0;
 		virtual void Update(double elapsedTime) = 0;
 		virtual void Render() = 0;
 
