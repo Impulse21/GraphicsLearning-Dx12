@@ -174,7 +174,9 @@ void CubeApp::Update(double elapsedTime)
 	i += 10 * elapsedTime;
 
 	const XMVECTOR rotationAxis = XMVectorSet(0, 1, 1, 0);
-	this->m_cubeWorldTransform = XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
+	XMMATRIX rotationMatrix = XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
+	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
+	this->m_cubeWorldTransform = scaleMatrix * rotationMatrix * translationMatrix;
 }
 
 void CubeApp::Render()
