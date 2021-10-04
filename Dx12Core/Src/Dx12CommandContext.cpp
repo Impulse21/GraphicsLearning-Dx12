@@ -2,6 +2,8 @@
 
 #include <pix.h>
 
+#include <optional>
+
 using namespace Dx12Core;
 Dx12CommandContext::Dx12CommandContext(
 	RefCountPtr<ID3D12Device2> device,
@@ -23,6 +25,8 @@ Dx12CommandContext::Dx12CommandContext(
 	this->m_trackedResources = std::make_shared<ReferencedResources>();
 
 	this->m_internalList->SetName(debugName.c_str());
+	
+	this->m_uploadBuffer = std::make_unique<UploadBuffer>(device);
 }
 
 void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
@@ -34,6 +38,8 @@ void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
 	this->m_internalList->Reset(this->m_allocator, nullptr);
 
 	this->m_trackedResources = std::make_shared<ReferencedResources>();
+
+	this->m_uploadBuffer->Reset();
 }
 
 void Dx12Core::Dx12CommandContext::Close()
@@ -86,6 +92,30 @@ void Dx12Core::Dx12CommandContext::ClearTextureFloat(ITexture* texture, Color co
 	{
 		this->m_internalList->ClearRenderTargetView(internal->Rtv.GetCpuHandle(), &clearColour.R, 0, nullptr);
 	}
+}
+
+void Dx12Core::Dx12CommandContext::ClearDepthStencilTexture(ITexture* depthStencil, bool clearDepth, float depth, bool clearStencil, uint8_t stencil)
+{
+	Texture* internal = SafeCast<Texture*>(depthStencil);
+
+	D3D12_CLEAR_FLAGS flags = {};
+	if (clearDepth)
+	{
+		flags |= D3D12_CLEAR_FLAG_DEPTH;
+	}
+
+	if (clearStencil)
+	{
+		flags |= D3D12_CLEAR_FLAG_STENCIL;
+	}
+
+	this->m_internalList->ClearDepthStencilView(
+		internal->Dsv.GetCpuHandle(),
+		flags,
+		depth,
+		stencil,
+		0,
+		nullptr);
 }
 
 void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
@@ -141,10 +171,23 @@ void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
 		this->m_trackedResources->Resources.push_back(renderTarget);
 	}
 
-	if (!renderTargetViews.empty())
+	bool hasDepth = false;
+	D3D12_CPU_DESCRIPTOR_HANDLE depthView = {};
+	if (state.DepthStencil)
 	{
-		this->m_internalList->OMSetRenderTargets(renderTargetViews.size(), renderTargetViews.data(), false, nullptr);
+		Texture* t = SafeCast<Texture*>(state.DepthStencil.Get());
+
+		renderTargetViews.push_back(t->Dsv.GetCpuHandle());
+		this->m_trackedResources->Resources.push_back(state.DepthStencil);
+		hasDepth = true;
 	}
+
+	int numRenderTargets = renderTargetViews.size();
+	this->m_internalList->OMSetRenderTargets(
+		numRenderTargets,
+		renderTargetViews.data(),
+		hasDepth,
+		hasDepth ? &depthView : nullptr);
 
 	if (state.VertexBuffer)
 	{
@@ -205,6 +248,17 @@ void Dx12Core::Dx12CommandContext::WriteBuffer(
 		0, 0, 1, &subresourceData);
 
 	this->m_trackedResources->NativeResources.push_back(intermediateResource);
+}
+
+void Dx12Core::Dx12CommandContext::BindDynamicConstantBuffer(
+	size_t rootParameterIndex,
+	size_t sizeInBytes,
+	const void* bufferData)
+{
+	UploadBuffer::Allocation alloc = this->m_uploadBuffer->Allocate(sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+	std::memcpy(alloc.Cpu, bufferData, sizeInBytes);
+
+	this->m_internalList->SetGraphicsRootConstantBufferView(rootParameterIndex, alloc.Gpu);
 }
 
 ScopedMarker Dx12Core::Dx12CommandContext::BeginScropedMarker(std::string name)

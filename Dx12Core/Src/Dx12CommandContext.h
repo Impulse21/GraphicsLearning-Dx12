@@ -5,6 +5,7 @@
 #include "Dx12Resources.h"
 
 #include "Dx12Core/Dx12CommandAllocatorPool.h"
+#include "Dx12UploadBuffer.h"
 
 #include <memory>
 
@@ -35,6 +36,7 @@ namespace Dx12Core
 		void TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) override;
 		void TransitionBarrier(IBuffer* buffer, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) override;
 		void ClearTextureFloat(ITexture* texture, Color const& clearColour) override;
+		void ClearDepthStencilTexture(ITexture* depthStencil, bool clearDepth, float depth, bool clearStencil, uint8_t stencil) override;
 
 		void SetGraphicsState(GraphicsState& state) override;
 
@@ -48,6 +50,8 @@ namespace Dx12Core
 
 		void WriteBuffer(IBuffer* buffer, const void* data, size_t dataSize, uint64_t destOffsetBytes = 0) override;
 
+		void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) override;
+
 		virtual ScopedMarker BeginScropedMarker(std::string name) override;
 		virtual void BeginMarker(std::string name);
 		virtual void EndMarker();
@@ -56,6 +60,8 @@ namespace Dx12Core
 		RefCountPtr<ID3D12Device2> m_device;
 		RefCountPtr<ID3D12GraphicsCommandList> m_internalList;
 		ID3D12CommandAllocator* m_allocator;
+
+		std::unique_ptr<UploadBuffer> m_uploadBuffer;
 
 		CommandAllocatorPool m_allocatorPool;
 

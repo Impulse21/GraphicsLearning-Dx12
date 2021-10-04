@@ -150,10 +150,9 @@ namespace Dx12Core
         TextureDimension Dimension = TextureDimension::Unknown;
         BindFlags Bindings = BindFlags::None;
 
-        D3D12_RESOURCE_STATES ResourceState;
-
         DXGI_FORMAT Format;
-
+        D3D12_CLEAR_VALUE OptmizedClearValue;
+        D3D12_RESOURCE_STATES InitialState = D3D12_RESOURCE_STATE_COMMON;
         std::string DebugName;
     };
 
@@ -516,6 +515,7 @@ namespace Dx12Core
         std::vector<Viewport> Viewports;
         std::vector<Rect> ScissorRect; // TODO: consider arrays
         std::vector<TextureHandle> RenderTargets;
+        TextureHandle DepthStencil = nullptr;
     };
 
     class ScopedMarker;
@@ -529,6 +529,7 @@ namespace Dx12Core
         virtual void TransitionBarrier(IBuffer* buffer, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) = 0;
 
         virtual void ClearTextureFloat(ITexture* texture, Color const& clearColour) = 0;
+        virtual void ClearDepthStencilTexture(ITexture* depthStencil, bool clearDepth, float depth, bool clearStencil, uint8_t stencil) = 0;
 
         virtual void SetGraphicsState(GraphicsState& state) = 0;
 
@@ -547,6 +548,13 @@ namespace Dx12Core
         }
 
         virtual void WriteBuffer(IBuffer* buffer, const void* data, size_t dataSize, uint64_t destOffsetBytes = 0) = 0;
+
+        virtual void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) = 0;
+        template<typename T>
+        void BindDynamicConstantBuffer(size_t rootParameterIndex, T const& bufferData)
+        {
+            this->BindDynamicConstantBuffer(rootParameterIndex, sizeof(T), &bufferData);
+        }
 
         virtual ScopedMarker BeginScropedMarker(std::string name) = 0;
         virtual void BeginMarker(std::string name) = 0;
@@ -584,6 +592,7 @@ namespace Dx12Core
         virtual void WaitForIdle() const = 0;
 
     public:
+        virtual TextureHandle CreateTexture(TextureDesc desc) = 0;
         virtual TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native) = 0;
 
         virtual BufferHandle CreateBuffer(BufferDesc desc) = 0;

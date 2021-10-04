@@ -10,3 +10,11 @@ target_link_libraries(TriangleApp d3d12.lib dxgi.lib Shaders Dx12Core)
 target_include_directories(TriangleApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include)
 
 set_target_properties(TriangleApp PROPERTIES FOLDER "UnitTests")
+
+# set the project name and version
+add_executable(CubeApp Src/Cube.cpp)
+
+target_link_libraries(CubeApp d3d12.lib dxgi.lib Shaders Dx12Core)
+target_include_directories(CubeApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include)
+
+set_target_properties(CubeApp PROPERTIES FOLDER "UnitTests")

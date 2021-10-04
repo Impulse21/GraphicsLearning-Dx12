@@ -28,6 +28,12 @@ Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& c
 			this->m_context,
 			D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
 			desc.RenderTargetViewHeapSize);
+
+	this->m_depthStencilViewHeap =
+		std::make_unique<StaticDescriptorHeap>(
+			this->m_context,
+			D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+			desc.DepthStencilViewHeapSize);
 }
 
 Dx12Core::GraphicsDevice::~GraphicsDevice()
@@ -160,6 +166,54 @@ void Dx12Core::GraphicsDevice::WaitForIdle() const
 			queue->WaitForIdle();
 		}
 	}
+}
+
+TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
+{
+	// Use unique ptr here to ensure safety until we are able to pass this over to the texture handle
+	std::unique_ptr<Texture> internal = std::make_unique<Texture>(this, desc);
+
+	D3D12_CLEAR_VALUE optimizedClearValue = {};
+	optimizedClearValue.Format = desc.Format;
+	optimizedClearValue.DepthStencil = desc.OptmizedClearValue.DepthStencil;
+	
+	D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
+
+	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
+	{
+		resourceFlags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+	}
+
+	ThrowIfFailed(
+		this->m_context.Device2->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Tex2D(
+				desc.Format, desc.Width, desc.Height,
+				1, 0, 1, 0, resourceFlags),
+			desc.InitialState,
+			&optimizedClearValue,
+			IID_PPV_ARGS(&internal->D3DResource)
+	));
+
+	// Create Views
+	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
+	{
+		internal->Dsv = this->m_depthStencilViewHeap->AllocateDescriptor();
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+		dsvDesc.Format = desc.Format;
+		dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D; // TODO: use desc.
+		dsvDesc.Texture2D.MipSlice = 0;
+		dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+		this->m_context.Device2->CreateDepthStencilView(
+			internal->D3DResource,
+			&dsvDesc,
+			internal->Dsv.GetCpuHandle());
+	}
+
+	return TextureHandle::Create(internal.release());
 }
 
 TextureHandle Dx12Core::GraphicsDevice::CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native)

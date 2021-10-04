@@ -30,7 +30,9 @@ set(dx12_core_src_files
     Src/Dx12CommandContext.h
     Src/Dx12CommandContext.cpp
     Src/DescriptorAllocation.h
-    Src/DescriptorAllocation.cpp)
+    Src/DescriptorAllocation.cpp
+    Src/Dx12UploadBuffer.h
+    Src/Dx12UploadBuffer.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}
@@ -38,7 +40,7 @@ add_library(Dx12Core STATIC
 
 target_link_libraries(Dx12Core d3d12.lib dxgi.lib dxguid.lib)
 
-target_include_directories(Dx12Core PUBLIC Include ../ThirdParty/spdlog/include ../ThirdParty/glfw)
+target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw)
 
 
 set_property(TARGET Dx12Core PROPERTY CXX_STANDARD 17)

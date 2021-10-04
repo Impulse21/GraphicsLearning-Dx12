@@ -64,7 +64,7 @@ namespace Dx12Core
 	class Texture : public RefCounter<ITexture>
 	{
 	public:
-		Texture(GraphicsDevice* device, TextureDesc desc)
+		Texture(GraphicsDevice* device, TextureDesc const& desc)
 			: m_desc(std::move(desc))
 			, Device(device)
 		{
@@ -74,6 +74,7 @@ namespace Dx12Core
 
 		RefCountPtr<ID3D12Resource> D3DResource = nullptr;
 		DescriptorAllocation Rtv = {};
+		DescriptorAllocation Dsv = {};
 
 		GraphicsDevice* Device;
 
