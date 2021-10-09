@@ -56,10 +56,10 @@ static void ReverseWinding(std::vector<uint16_t>& indices, std::vector<Vertex>& 
 	}
 }
 
-class TexturedCubeApp : public ApplicationDx12Base
+class BindlessExampleApp : public ApplicationDx12Base
 {
 public:
-	TexturedCubeApp() = default;
+	BindlessExampleApp() = default;
 
 protected:
 	void LoadContent() override;
@@ -87,10 +87,10 @@ private:
 };
 
 
-CREATE_APPLICATION(TexturedCubeApp)
+CREATE_APPLICATION(BindlessExampleApp)
 
 
-void TexturedCubeApp::LoadContent()
+void BindlessExampleApp::LoadContent()
 {
 	{
 		const XMVECTOR eyePosition = XMVectorSet(0, 0, -10, 1);
@@ -135,29 +135,28 @@ void TexturedCubeApp::LoadContent()
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
+	ShaderParameterLayout parameterLayout = {};
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(MaterialInfo) / 4);
+	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddStaticSampler<0, 0>(
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+		1.0f);
+
+	BindlessShaderParameterLayout bindlessParameterLayout = {};
+	bindlessParameterLayout.MaxCapacity = UINT_MAX;
+	bindlessParameterLayout.AddParameterSRV(100);
+
 	pipelineDesc.VS = vs;
 	pipelineDesc.PS = ps;
 	pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
 	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
-	pipelineDesc.RootSignatureDesc.AllowInputLayout();
-	pipelineDesc.RootSignatureDesc.Add32BitConstants<0, 0>(sizeof(MaterialInfo) / 4);
-	pipelineDesc.RootSignatureDesc.AddConstantBufferView<1, 0>();
+	pipelineDesc.UseShaderParameters = true;
+	pipelineDesc.ShaderParameters.AllowInputLayout();
+	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
+	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
 
-	// -- SRV Table Set-up ---
-	DescriptorTableDesc srvTable;
-	{
-		constexpr D3D12_DESCRIPTOR_RANGE_FLAGS flags =
-			D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
-
-		srvTable.AddSRVRange<0, 100>(UINT_MAX, flags, 0);
-	}
-
-	pipelineDesc.RootSignatureDesc.AddDescriptorTable(srvTable);
-	pipelineDesc.RootSignatureDesc.AddStaticSampler<0, 0>(
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-		1.0f);
 	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
@@ -200,7 +199,7 @@ void TexturedCubeApp::LoadContent()
 	this->GetDevice()->Submit(true);
 }
 
-void TexturedCubeApp::Update(double elapsedTime)
+void BindlessExampleApp::Update(double elapsedTime)
 {
 	// Set Matrix data 
 	XMMATRIX translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 0.0f);
@@ -215,7 +214,7 @@ void TexturedCubeApp::Update(double elapsedTime)
 	this->m_cubeWorldTransform = scaleMatrix * rotationMatrix * translationMatrix;
 }
 
-void TexturedCubeApp::Render()
+void BindlessExampleApp::Render()
 {
 	ICommandContext& gfxContext = this->GetDevice()->BeginContext();
 
@@ -261,7 +260,6 @@ void TexturedCubeApp::Render()
 
 		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, matInfo);
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-		gfxContext.BindBindlessDescriptorTables(RootParameters::TextureSRV);
 		gfxContext.DrawIndexed(this->m_indices.size());
 	}
 
@@ -273,7 +271,7 @@ void TexturedCubeApp::Render()
 	this->GetDevice()->Submit();
 }
 
-void TexturedCubeApp::CreateCube(
+void BindlessExampleApp::CreateCube(
 	float size,
 	std::vector<Vertex>& outVertices,
 	std::vector<uint16_t>& outIndices,
@@ -342,7 +340,7 @@ void TexturedCubeApp::CreateCube(
 	}
 }
 
-void XM_CALLCONV TexturedCubeApp::ComputeMatrices(FXMMATRIX model, CXMMATRIX view, CXMMATRIX projection, DrawInfo& drawInfo)
+void XM_CALLCONV BindlessExampleApp::ComputeMatrices(FXMMATRIX model, CXMMATRIX view, CXMMATRIX projection, DrawInfo& drawInfo)
 {
 	drawInfo.ModelViewProjectionMatrix = model * view * projection;
 }

@@ -9,6 +9,7 @@ namespace Dx12Core
 {
 	class GraphicsDevice;
 
+
 	class Shader : public RefCounter<IShader>
 	{
 	public:
@@ -27,6 +28,19 @@ namespace Dx12Core
 		const ShaderDesc m_desc;
 	};
 
+	class RootSignature : public RefCounter<IResource>
+	{
+	public:
+		explicit RootSignature(RefCountPtr<ID3D12RootSignature> rootSignature)
+			: D3DRootSignature(rootSignature) {}
+
+		RefCountPtr<ID3D12RootSignature> D3DRootSignature;
+
+		uint32_t BindlessRootParameterOffset = 0;
+	};
+
+	typedef RefCountPtr<RootSignature> RootSignatureHandle;
+
 	class GraphicsPipeline : public RefCounter<IGraphicsPipeline>
 	{
 	public:
@@ -35,9 +49,13 @@ namespace Dx12Core
 		{}
 
 		RefCountPtr<ID3D12PipelineState> D3DPipelineState;
-		RefCountPtr<ID3D12RootSignature> D3DRootSignature;
+		RootSignatureHandle RootSignature;
 
 		const GraphicsPipelineDesc& GetDesc() const override { return this->m_desc; }
+
+		bool HasBindlessParamaters;
+		D3D12_GPU_DESCRIPTOR_HANDLE bindlessResourceTable;
+		// TODO: D3D12_GPU_DESCRIPTOR_HANDLE bindlessSamplerTable;
 
 	private:
 		const GraphicsPipelineDesc m_desc;

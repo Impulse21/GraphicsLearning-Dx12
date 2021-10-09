@@ -133,28 +133,42 @@ Dx12Context Dx12Core::Dx12Factory::CreateContext()
 	D3D12_FEATURE_DATA_D3D12_OPTIONS6 featureSupport6 = {};
 	bool hasOptions6 = SUCCEEDED(context.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS6, &featureSupport6, sizeof(featureSupport6)));
 
-	// D3D12_FEATURE_DATA_D3D12_OPTIONS7 featureSupport7 = {};
-	bool hasOptions7 = false; // SUCCEEDED(m_Context.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &m_Options7, sizeof(m_Options7)));
+	D3D12_FEATURE_DATA_D3D12_OPTIONS7 featureSupport7 = {};
+	bool hasOptions7 = SUCCEEDED(context.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &featureSupport7, sizeof(featureSupport7)));
 
 	if (SUCCEEDED(context.Device->QueryInterface(&context.Device5)) && hasOptions5)
 	{
 		context.IsDxrSupported = featureSupport5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0;
 		context.IsRenderPassSupported = featureSupport5.RenderPassesTier >= D3D12_RENDER_PASS_TIER_0;
-		// this->IsRayQuerySupported= featureSupport5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1;
+		context.IsRayQuerySupported = featureSupport5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1;
 	}
 
 	if (hasOptions6)
 	{
 		context.IsVariableRateShadingSupported = featureSupport6.VariableShadingRateTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2;
-		// this->m_shadingRateImageTileSize = featureSupport6.ShadingRateImageTileSize;
+		// context.Shading->m_shadingRateImageTileSize = featureSupport6.ShadingRateImageTileSize;
 	}
 
 
 	if (SUCCEEDED(context.Device->QueryInterface(&context.Device2)) && hasOptions7)
 	{
-		// this->IsCreateNotZeroedAvailable = true;
-		// this->m_meshShadingSupported = feature_support7.MeshShaderTier >= D3D12_MESH_SHADER_TIER_1;
+		context.IsCreateNotZeroedAvailable = true;
+		context.IsMeshShadingSupported = featureSupport7.MeshShaderTier >= D3D12_MESH_SHADER_TIER_1;
 	}
+
+	context.FeatureDataRootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+	if (FAILED(context.Device2->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &context.FeatureDataRootSignature, sizeof(context.FeatureDataRootSignature))))
+	{
+		context.FeatureDataRootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+	}
+
+	// Check shader model support
+	context.FeatureDataShaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_6;
+	if (FAILED(context.Device2->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &context.FeatureDataShaderModel, sizeof(context.FeatureDataShaderModel))))
+	{
+		context.FeatureDataShaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_0;
+	}
+
 
 	static const bool debugEnabled = IsDebuggerPresent();
 	if (debugEnabled)

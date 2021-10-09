@@ -339,8 +339,15 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 		CD3DX12_PIPELINE_STATE_STREAM_RENDER_TARGET_FORMATS RTVFormats;
 	} pipelineStateStream;
 
-	RefCountPtr<ID3D12RootSignature> rootSig = this->CreateRootSignature(desc.RootSignatureDesc);
-	pipelineStateStream.pRootSignature = rootSig;
+	RootSignatureHandle rootSig =
+		desc.UseShaderParameters
+		? this->CreateRootSignature(
+			desc.ShaderParameters.Flags,
+			desc.ShaderParameters.Binding,
+			desc.ShaderParameters.Bindless)
+		: this->CreateRootSignature(desc.RootSignatureDesc);
+
+	pipelineStateStream.pRootSignature = rootSig->D3DRootSignature;
 
 	// TODO:
 	// pipelineStateStream.InputLayout = { inputLayout, _countof(inputLayout) };
@@ -376,24 +383,91 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 
 	auto graphicsPipelineState = std::make_unique<GraphicsPipeline>(std::move(desc));
 	graphicsPipelineState->D3DPipelineState = pipelineState;
-	graphicsPipelineState->D3DRootSignature = rootSig;
+	graphicsPipelineState->RootSignature = rootSig;
+
+	if (desc.UseShaderParameters && desc.ShaderParameters.Bindless)
+	{
+		graphicsPipelineState->HasBindlessParamaters = true;
+		graphicsPipelineState->bindlessResourceTable = this->m_shaderResourceViewHeap->GetGpuHandle();
+	}
+
 	return GraphicsPipelineHandle::Create(graphicsPipelineState.release());
 }
 
-RefCountPtr<ID3D12RootSignature> Dx12Core::GraphicsDevice::CreateRootSignature(RootSignatureDesc& desc)
+RootSignatureHandle Dx12Core::GraphicsDevice::CreateRootSignature(RootSignatureDesc& desc)
+{
+	auto d3dRootSig = this->CreateD3DRootSignature(std::move(desc.BuildDx12Desc()));
+	std::unique_ptr<RootSignature> rootSignature = std::make_unique<RootSignature>(d3dRootSig);
+
+	return RootSignatureHandle::Create(rootSignature.release());
+}
+
+RootSignatureHandle Dx12Core::GraphicsDevice::CreateRootSignature(
+	D3D12_ROOT_SIGNATURE_FLAGS flags,
+	ShaderParameterLayout* shaderParameter,
+	BindlessShaderParameterLayout* bindlessLayout)
+{
+	std::vector<CD3DX12_ROOT_PARAMETER1> parameters;
+	std::vector<CD3DX12_STATIC_SAMPLER_DESC> staticSamplers;
+
+	if (shaderParameter)
+	{
+		// Memcopy, yes please
+		parameters.resize(shaderParameter->Parameters.size());
+		std::memcpy(parameters.data(), shaderParameter->Parameters.data(), sizeof(CD3DX12_ROOT_PARAMETER1) * parameters.size());
+
+		staticSamplers.resize(shaderParameter->StaticSamplers.size());
+		std::memcpy(staticSamplers.data(), shaderParameter->StaticSamplers.data(), sizeof(CD3DX12_ROOT_PARAMETER1) * staticSamplers.size());
+	}
+
+	uint32_t bindlessRootParameterOffset = 0;
+	std::vector<CD3DX12_DESCRIPTOR_RANGE1> descriptorRanges;
+	if (bindlessLayout)
+	{
+		constexpr D3D12_DESCRIPTOR_RANGE_FLAGS flags =
+			D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+		bindlessRootParameterOffset = static_cast<uint32_t>(parameters.size());
+		descriptorRanges.reserve(bindlessLayout->Parameters.size());
+
+		for (auto& param : bindlessLayout->Parameters)
+		{
+			assert(param.Type != D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, "Not Tested");
+			CD3DX12_DESCRIPTOR_RANGE1& range = descriptorRanges.emplace_back();
+			range.Init(
+				param.Type,
+				bindlessLayout->MaxCapacity,
+				param.BaseShaderRegister,
+				param.RegisterSpace,
+				flags,
+				bindlessLayout->FirstSlot);
+		}
+
+		CD3DX12_ROOT_PARAMETER1& parameter = parameters.emplace_back();
+		parameter.InitAsDescriptorTable(
+			descriptorRanges.size(),
+			descriptorRanges.data(),
+			bindlessLayout->Visibility);
+	}
+
+	D3D12_ROOT_SIGNATURE_DESC1 desc = {};
+	desc.NumParameters = static_cast<UINT>(parameters.size());
+	desc.pParameters = parameters.data();
+	desc.NumStaticSamplers = static_cast<UINT>(staticSamplers.size());
+	desc.pStaticSamplers = staticSamplers.data();
+	desc.Flags = flags;
+
+	auto d3dRootSig = this->CreateD3DRootSignature(std::move(desc));
+	std::unique_ptr<RootSignature> rootSignature = std::make_unique<RootSignature>(d3dRootSig);
+	rootSignature->BindlessRootParameterOffset = bindlessRootParameterOffset;
+	return RootSignatureHandle::Create(rootSignature.release());
+}
+
+RefCountPtr<ID3D12RootSignature> Dx12Core::GraphicsDevice::CreateD3DRootSignature(D3D12_ROOT_SIGNATURE_DESC1&& rootSigDesc)
 {
 	D3D12_VERSIONED_ROOT_SIGNATURE_DESC dx12RootSigDesc = {};
 	dx12RootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-	dx12RootSigDesc.Desc_1_1 = std::move(desc.BuildDx12Desc());
+	dx12RootSigDesc.Desc_1_1 = rootSigDesc;
 
-	// Create a root signature.
-	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
-	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
-	if (FAILED(this->m_context.Device2->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
-	{
-		// TODO: Cache this value
-		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
-	}
 
 	// Serialize the root signature
 	RefCountPtr<ID3DBlob> serializedRootSignatureBlob;
@@ -401,7 +475,7 @@ RefCountPtr<ID3D12RootSignature> Dx12Core::GraphicsDevice::CreateRootSignature(R
 	ThrowIfFailed(
 		::D3DX12SerializeVersionedRootSignature(
 			&dx12RootSigDesc,
-			featureData.HighestVersion,
+			this->m_context.FeatureDataRootSignature.HighestVersion,
 			&serializedRootSignatureBlob,
 			&errorBlob));
 

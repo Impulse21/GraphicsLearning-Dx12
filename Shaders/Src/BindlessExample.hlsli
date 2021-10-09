@@ -1,0 +1,6 @@
+#ifndef __BINDLESS_EXAMPLE_HLSLI__
+#define __BINDLESS_EXAMPLE_HLSLI__
+
+
+
+#endif

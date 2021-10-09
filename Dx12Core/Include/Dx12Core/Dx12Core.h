@@ -240,6 +240,135 @@ namespace Dx12Core
 
     typedef RefCountPtr<IShader> ShaderHandle;
 
+    struct BindlessShaderParameter
+    {
+        D3D12_DESCRIPTOR_RANGE_TYPE Type;
+        uint32_t BaseShaderRegister = 0;
+        uint32_t RegisterSpace = 0;
+
+        BindlessShaderParameter(
+            D3D12_DESCRIPTOR_RANGE_TYPE type,
+            uint32_t registerSpace)
+            : Type(type)
+            , RegisterSpace(registerSpace)
+        {
+        }
+    };
+
+    struct BindlessShaderParameterLayout
+    {
+        D3D12_SHADER_VISIBILITY Visibility = D3D12_SHADER_VISIBILITY_ALL;
+        uint32_t FirstSlot = 0;
+        uint32_t MaxCapacity = UINT_MAX;
+        std::vector<BindlessShaderParameter> Parameters;
+
+        BindlessShaderParameterLayout& AddParameterSRV(uint32_t registerSpace)
+        {
+            return this->AddParameter(
+                D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                registerSpace);
+        }
+
+        BindlessShaderParameterLayout& AddParameterUAV(uint32_t registerSpace)
+        {
+            return this->AddParameter(
+                D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+                registerSpace);
+        }
+
+        BindlessShaderParameterLayout& AddParameterCBV(uint32_t registerSpace)
+        {
+            return this->AddParameter(
+                D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+                registerSpace);
+        }
+
+        BindlessShaderParameterLayout& AddParameter(
+            D3D12_DESCRIPTOR_RANGE_TYPE type,
+            uint32_t registerSpace)
+        {
+            this->Parameters.emplace_back(
+                BindlessShaderParameter(type, registerSpace));
+
+            return *this;
+        }
+    };
+
+    struct ShaderParameterLayout
+    {
+        std::vector<CD3DX12_ROOT_PARAMETER1> Parameters;
+        std::vector<CD3DX12_STATIC_SAMPLER_DESC> StaticSamplers;
+
+        template<UINT ShaderRegister, UINT RegisterSpace>
+        ShaderParameterLayout& AddConstantParameter(UINT num32BitValues)
+        {
+            CD3DX12_ROOT_PARAMETER1 parameter = {};
+            parameter.InitAsConstants(num32BitValues, ShaderRegister, RegisterSpace);
+
+            this->AddParameter(parameter);
+            return *this;
+        }
+
+        template<UINT ShaderRegister, UINT RegisterSpace>
+        ShaderParameterLayout& AddCBVParameter(D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+        {
+            CD3DX12_ROOT_PARAMETER1 parameter = {};
+            parameter.InitAsConstantBufferView(ShaderRegister, RegisterSpace, flags);
+
+            this->AddParameter(parameter);
+            return *this;
+        }
+
+        template<UINT ShaderRegister, UINT RegisterSpace>
+        ShaderParameterLayout& AddSRVParameter(D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+        {
+            CD3DX12_ROOT_PARAMETER1 parameter = {};
+            parameter.InitAsShaderResourceView(ShaderRegister, RegisterSpace, flags);
+
+            this->AddParameter(parameter);
+            return *this;
+        }
+
+        template<UINT ShaderRegister, UINT RegisterSpace>
+        ShaderParameterLayout& AddUAVParameter(D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+        {
+            CD3DX12_ROOT_PARAMETER1 parameter = {};
+            parameter.InitAsUnorderedAccessView(ShaderRegister, RegisterSpace, flags);
+
+            this->AddParameter(parameter);
+            return *this;
+        }
+
+        template<UINT ShaderRegister, UINT RegisterSpace>
+        ShaderParameterLayout& AddStaticSampler(
+            D3D12_FILTER			   filter,
+            D3D12_TEXTURE_ADDRESS_MODE addressUVW,
+            UINT					   maxAnisotropy,
+            D3D12_COMPARISON_FUNC	   comparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+            D3D12_STATIC_BORDER_COLOR  borderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE)
+        {
+            CD3DX12_STATIC_SAMPLER_DESC& desc = this->StaticSamplers.emplace_back();
+            desc.Init(
+                ShaderRegister,
+                filter,
+                addressUVW,
+                addressUVW,
+                addressUVW,
+                0.0f,
+                maxAnisotropy,
+                comparisonFunc,
+                borderColor);
+            desc.RegisterSpace = RegisterSpace;
+
+            return *this;
+        }
+
+        void AddParameter(D3D12_ROOT_PARAMETER1 parameter)
+        {
+            Parameters.emplace_back(parameter);
+        }
+    };
+
 	struct DescriptorTableDesc
 	{
 		std::vector<CD3DX12_DESCRIPTOR_RANGE1> DescriptorRanges;
@@ -436,10 +565,10 @@ namespace Dx12Core
         RootSignatureDesc& DenyPSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS; return *this; }
         RootSignatureDesc& AllowStreamOutput() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT; return *this; }
         RootSignatureDesc& SetAsLocalRootSignature() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE; return *this; }
-        // RootSignatureDesc& DenyASAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS; return *this; }
-        // RootSignatureDesc& DenyMSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS; return *this; }
-		// RootSignatureDesc& AllowResourceDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED; return *this; }
-		// RootSignatureDesc& AllowSampleDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; return *this; }
+        RootSignatureDesc& DenyASAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS; return *this; }
+        RootSignatureDesc& DenyMSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS; return *this; }
+		RootSignatureDesc& AllowResourceDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED; return *this; }
+		RootSignatureDesc& AllowSampleDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; return *this; }
 
         D3D12_ROOT_SIGNATURE_DESC1 BuildDx12Desc() noexcept
         {
@@ -475,7 +604,37 @@ namespace Dx12Core
     {
         D3D12_PRIMITIVE_TOPOLOGY_TYPE PrimitiveTopologyType;
         std::vector<D3D12_INPUT_ELEMENT_DESC> InputLayout;
+        
         RootSignatureDesc RootSignatureDesc = {};
+
+        bool UseShaderParameters = false;
+
+        struct ShaderParameters
+        {
+            D3D12_ROOT_SIGNATURE_FLAGS Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+            ShaderParameterLayout* Binding = nullptr;
+            BindlessShaderParameterLayout* Bindless = nullptr;
+
+            void AllowInputLayout() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT; }
+            void DenyVSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS; };
+            void DenyHSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS; };
+            void DenyDSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS; };
+            void DenyTessellationShaderAccess() noexcept
+            {
+                this->DenyHSAccess();
+                this->DenyDSAccess();
+            };
+            void DenyGSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS; }
+            void DenyPSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS; }
+            void AllowStreamOutput() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT; }
+            void SetAsLocalRootSignature() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE; }
+            void DenyASAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS; }
+            void DenyMSAccess() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS; }
+            void AllowResourceDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED; }
+            void AllowSampleDescriptorHeapIndexing() noexcept { this->Flags |= D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; }
+        };
+
+        ShaderParameters ShaderParameters = {};
 
         ShaderHandle VS;
         ShaderHandle HS;

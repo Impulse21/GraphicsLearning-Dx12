@@ -154,7 +154,16 @@ void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
 	this->m_internalList->SetPipelineState(pipeline->D3DPipelineState);
 
 	// Root Signature without casting? Maybe keep a week reference in the Graphics pipline state object;
-	this->m_internalList->SetGraphicsRootSignature(pipeline->D3DRootSignature);
+	this->m_internalList->SetGraphicsRootSignature(pipeline->RootSignature->D3DRootSignature);
+
+	if (pipeline->HasBindlessParamaters)
+	{
+		this->m_internalList->SetGraphicsRootDescriptorTable(
+			pipeline->RootSignature->BindlessRootParameterOffset, pipeline->bindlessResourceTable);
+
+		// TODO: Samplers
+	}
+	
 
 	switch (pipeline->GetDesc().PrimitiveTopologyType)
 	{

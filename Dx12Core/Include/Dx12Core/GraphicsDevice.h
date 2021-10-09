@@ -66,7 +66,12 @@ namespace Dx12Core
 		const Dx12Context& GetDx12Context() const { return this->m_context; }
 
 	private:
-		RefCountPtr<ID3D12RootSignature> CreateRootSignature(RootSignatureDesc& desc);
+		RootSignatureHandle CreateRootSignature(RootSignatureDesc& desc);
+		RootSignatureHandle CreateRootSignature(
+			D3D12_ROOT_SIGNATURE_FLAGS flags,
+			ShaderParameterLayout* shaderParameter,
+			BindlessShaderParameterLayout* bindlessLayout);
+		RefCountPtr<ID3D12RootSignature> CreateD3DRootSignature(D3D12_ROOT_SIGNATURE_DESC1&& rootSigDesc);
 
 	private:
 		struct Frame

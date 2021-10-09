@@ -1,9 +1,10 @@
 #pragma once
 
-#include "d3dx12.h"
+#include "directx/d3dx12.h"
+#include "directx/d3d12.h"
 
 #include <dxgi1_6.h>
-#include <d3d12.h>
+// #include <d3d12.h>
 
 #ifdef _DEBUG
 	#include <dxgidebug.h>
@@ -71,11 +72,15 @@ namespace Dx12Core
 
         RefCountPtr<IDXGIAdapter> GpuAdapter;
 
+        D3D12_FEATURE_DATA_ROOT_SIGNATURE FeatureDataRootSignature = {};
+        D3D12_FEATURE_DATA_SHADER_MODEL   FeatureDataShaderModel = {};
+
         bool IsDxrSupported = false;
         bool IsRayQuerySupported = false;
         bool IsRenderPassSupported = false;
         bool IsVariableRateShadingSupported = false;
         bool IsMeshShadingSupported = false;
+        bool IsCreateNotZeroedAvailable = false;
         bool IsUnderGraphicsDebugger = false;
     };
 
