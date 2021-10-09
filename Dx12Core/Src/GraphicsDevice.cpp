@@ -34,6 +34,13 @@ Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& c
 			this->m_context,
 			D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
 			desc.DepthStencilViewHeapSize);
+
+	this->m_shaderResourceViewHeap=
+		std::make_unique<StaticDescriptorHeap>(
+			this->m_context,
+			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+			desc.DepthStencilViewHeapSize,
+			true);
 }
 
 Dx12Core::GraphicsDevice::~GraphicsDevice()
@@ -105,6 +112,7 @@ ICommandContext& Dx12Core::GraphicsDevice::BeginContext()
 		this->m_commandContexts[contextId]->Reset(this->GetGfxQueue()->GetLastCompletedFence());
 	}
 
+	this->m_commandContexts[contextId]->BindHeaps({ this->m_shaderResourceViewHeap.get(), this->m_samplerHeap.get() });
 	return *this->m_commandContexts[contextId];
 }
 
@@ -168,14 +176,31 @@ void Dx12Core::GraphicsDevice::WaitForIdle() const
 	}
 }
 
+DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(ITexture* texture) const
+{
+	Texture* internal = SafeCast<Texture*>(texture);
+
+	return internal->Srv.GetIndex();
+}
+
+DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(IBuffer* buffer) const
+{
+	Texture* internal = SafeCast<Texture*>(buffer);
+
+	return internal->Srv.GetIndex();
+}
+
 TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 {
 	// Use unique ptr here to ensure safety until we are able to pass this over to the texture handle
 	std::unique_ptr<Texture> internal = std::make_unique<Texture>(this, desc);
 
 	D3D12_CLEAR_VALUE optimizedClearValue = {};
-	optimizedClearValue.Format = desc.Format;
-	optimizedClearValue.DepthStencil = desc.OptmizedClearValue.DepthStencil;
+	if (desc.OptmizedClearValue.has_value())
+	{
+		optimizedClearValue.Format = desc.Format;
+		optimizedClearValue.DepthStencil = desc.OptmizedClearValue.value().DepthStencil;
+	}
 	
 	D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 
@@ -192,7 +217,7 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 				desc.Format, desc.Width, desc.Height,
 				1, 0, 1, 0, resourceFlags),
 			desc.InitialState,
-			&optimizedClearValue,
+			desc.OptmizedClearValue.has_value() ? &optimizedClearValue : nullptr,
 			IID_PPV_ARGS(&internal->D3DResource)
 	));
 
@@ -211,6 +236,22 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 			internal->D3DResource,
 			&dsvDesc,
 			internal->Dsv.GetCpuHandle());
+	}
+	else if (BindFlags::ShaderResource == (desc.Bindings | BindFlags::ShaderResource))
+	{
+		internal->Srv = this->m_shaderResourceViewHeap->AllocateDescriptor();
+
+		// TODO: I AM HERE
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = desc.Format; // TODO: handle SRGB format
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;  // Only 2D textures are supported (this was checked in the calling function).
+		srvDesc.Texture2D.MipLevels = internal->GetDesc().MipLevels;
+
+		this->m_context.Device2->CreateShaderResourceView(
+			internal->D3DResource,
+			&srvDesc,
+			internal->Srv.GetCpuHandle());
 	}
 
 	return TextureHandle::Create(internal.release());
@@ -343,19 +384,20 @@ RefCountPtr<ID3D12RootSignature> Dx12Core::GraphicsDevice::CreateRootSignature(R
 {
 	D3D12_VERSIONED_ROOT_SIGNATURE_DESC dx12RootSigDesc = {};
 	dx12RootSigDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-	dx12RootSigDesc.Desc_1_1 = desc.BuildDx12Desc();
+	dx12RootSigDesc.Desc_1_1 = std::move(desc.BuildDx12Desc());
 
 	// Create a root signature.
 	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
 	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
 	if (FAILED(this->m_context.Device2->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
 	{
+		// TODO: Cache this value
 		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 	}
 
 	// Serialize the root signature
-	Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSignatureBlob;
-	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+	RefCountPtr<ID3DBlob> serializedRootSignatureBlob;
+	RefCountPtr<ID3DBlob> errorBlob;
 	ThrowIfFailed(
 		::D3DX12SerializeVersionedRootSignature(
 			&dx12RootSigDesc,

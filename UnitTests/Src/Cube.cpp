@@ -32,7 +32,7 @@ namespace RootParameters
 {
 	enum
 	{
-		MVP = 0,
+		DrawInfoCB = 0,
 		Count
 	};
 }
@@ -101,7 +101,9 @@ void CubeApp::LoadContent()
 		desc.Dimension = TextureDimension::Texture2D;
 		desc.DebugName = "Depth Buffer";
 		desc.InitialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-		desc.OptmizedClearValue.DepthStencil = { 1.0f, 0 };
+		D3D12_CLEAR_VALUE clearValue = {};
+		clearValue.DepthStencil = { 1.0f, 0 };
+		desc.OptmizedClearValue = std::make_optional(clearValue);
 
 		this->m_depthBuffer = this->GetDevice()->CreateTexture(desc);
 	}
@@ -127,7 +129,7 @@ void CubeApp::LoadContent()
 	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
 	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
 	pipelineDesc.RootSignatureDesc.AllowInputLayout();
-	pipelineDesc.RootSignatureDesc.AddConstantBufferView<RootParameters::MVP, 0>();
+	pipelineDesc.RootSignatureDesc.AddConstantBufferView<RootParameters::DrawInfoCB, 0>();
 	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
@@ -221,7 +223,7 @@ void CubeApp::Render()
 		gfxContext.SetGraphicsState(s);
 
 		// TODO: Find a way to use the graphics state?
-		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::MVP, drawInfo);
+		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
 
 		gfxContext.DrawIndexed(this->m_indices.size());
 	}

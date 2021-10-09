@@ -54,6 +54,8 @@ namespace Dx12Core
 
 		RefCountPtr<ID3D12Resource> D3DResource;
 
+		DescriptorAllocation Srv = {};
+
 		D3D12_VERTEX_BUFFER_VIEW VertexView = {};
 		D3D12_INDEX_BUFFER_VIEW IndexView = {};
 
@@ -75,6 +77,7 @@ namespace Dx12Core
 		RefCountPtr<ID3D12Resource> D3DResource = nullptr;
 		DescriptorAllocation Rtv = {};
 		DescriptorAllocation Dsv = {};
+		DescriptorAllocation Srv = {};
 
 		GraphicsDevice* Device;
 

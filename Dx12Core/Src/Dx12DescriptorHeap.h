@@ -27,6 +27,8 @@ namespace Dx12Core
 		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(DescriptorIndex index = 0);
 		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(DescriptorIndex index = 0);
 
+		D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const { return this->m_heapType; }
+
 	private:
 		struct DescriptorIndexPool
 		{

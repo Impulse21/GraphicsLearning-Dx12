@@ -42,6 +42,9 @@ namespace Dx12Core
 		void WaitForIdle() const;
 
 	public:
+		DescriptorIndex GetDescritporIndex(ITexture* texture) const override;
+		DescriptorIndex GetDescritporIndex(IBuffer* buffer) const override;
+
 		TextureHandle CreateTexture(TextureDesc desc) override;
 		TextureHandle CreateTextureFromNative(TextureDesc desc, RefCountPtr<ID3D12Resource> native) override;
 		BufferHandle CreateBuffer(BufferDesc desc) override;

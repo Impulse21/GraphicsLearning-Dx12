@@ -15,7 +15,8 @@ set(dx12_core_include_files
     Include/Dx12Core/Dx12Queue.h
     Include/Dx12Core/Dx12CommandAllocatorPool.h
     Include/Dx12Core/ResourceId.h
-    Include/Dx12Core/ResouceIdOwner.h)
+    Include/Dx12Core/ResouceIdOwner.h
+    Include/Dx12Core/ResourceStore.h)
 
 set(dx12_core_src_files
     Src/Application.cpp
@@ -32,15 +33,16 @@ set(dx12_core_src_files
     Src/DescriptorAllocation.h
     Src/DescriptorAllocation.cpp
     Src/Dx12UploadBuffer.h
-    Src/Dx12UploadBuffer.cpp)
+    Src/Dx12UploadBuffer.cpp
+    Src/ResourceStore.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}
     ${dx12_core_src_files})
 
-target_link_libraries(Dx12Core d3d12.lib dxgi.lib dxguid.lib)
+target_link_libraries(Dx12Core d3d12.lib dxgi.lib dxguid.lib DirectXTex)
 
-target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw)
+target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw ../ThirdParty/DirectXTex/DirectXTex)
 
 
 set_property(TARGET Dx12Core PROPERTY CXX_STANDARD 17)

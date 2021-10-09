@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "Dx12Core/Dx12Factory.h"
-
+#include "Dx12Core/ResourceStore.h"
 
 namespace Dx12Core
 {
@@ -68,6 +68,7 @@ namespace Dx12Core
 		virtual void Render() = 0;
 
 		IGraphicsDevice* GetDevice() { return this->m_graphicsDevice; }
+		TextureResourceStore* GetTextureStore() { return this->m_textureStore.get(); }
 
 	private:
 		void CreateApplicationWindow(WindowProperties properties);
@@ -81,6 +82,7 @@ namespace Dx12Core
 		GLFWwindow* m_window;
 
 		IGraphicsDevice* m_graphicsDevice;
+		std::unique_ptr<TextureResourceStore> m_textureStore;
 
 		bool m_isWindowVisible = true;
 

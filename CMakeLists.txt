@@ -13,6 +13,7 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(ThirdParty/glfw)
+add_subdirectory(ThirdParty/DirectXTex)
 
 add_subdirectory(Shaders)
 add_subdirectory(Dx12Core)
@@ -22,3 +23,8 @@ target_link_libraries(Dx12Core glfw)
 add_subdirectory(UnitTests)
 
 set_target_properties(glfw PROPERTIES FOLDER "ThirdParty")
+set_target_properties(DirectXTex PROPERTIES FOLDER "ThirdParty")
+
+SET(BUILD_TOOLS OFF CACHE BOOL "Build tex command-line tools")
+SET(BUILD_DX11 OFF CACHE BOOL "Build with DirectX11 Runtime support")
+SET(BUILD_DX12 OFF CACHE BOOL "Build with DirectX12 Runtime support")

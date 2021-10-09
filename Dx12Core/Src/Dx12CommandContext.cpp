@@ -3,6 +3,15 @@
 #include <pix.h>
 
 #include <optional>
+#include "Dx12DescriptorHeap.h"
+
+
+// helper function for texture subresource calculations
+// https://msdn.microsoft.com/en-us/library/windows/desktop/dn705766(v=vs.85).aspx
+uint32_t CalcSubresource(uint32_t mipSlice, uint32_t arraySlice, uint32_t planeSlice, uint32_t mipLevels, uint32_t arraySize)
+{
+	return mipSlice + (arraySlice * mipLevels) + (planeSlice * mipLevels * arraySize);
+}
 
 using namespace Dx12Core;
 Dx12CommandContext::Dx12CommandContext(
@@ -27,6 +36,8 @@ Dx12CommandContext::Dx12CommandContext(
 	this->m_internalList->SetName(debugName.c_str());
 	
 	this->m_uploadBuffer = std::make_unique<UploadBuffer>(device);
+
+	this->m_cbvSrvUavBindlessTable = D3D12_GPU_DESCRIPTOR_HANDLE();
 }
 
 void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
@@ -38,7 +49,7 @@ void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
 	this->m_internalList->Reset(this->m_allocator, nullptr);
 
 	this->m_trackedResources = std::make_shared<ReferencedResources>();
-
+	this->m_cbvSrvUavBindlessTable = D3D12_GPU_DESCRIPTOR_HANDLE();
 	this->m_uploadBuffer->Reset();
 }
 
@@ -54,6 +65,25 @@ std::shared_ptr<ReferencedResources> Dx12Core::Dx12CommandContext::Executed(uint
 	auto retVal = this->m_trackedResources;
 	this->m_trackedResources.reset();
 	return retVal;
+}
+
+void Dx12Core::Dx12CommandContext::BindHeaps(std::array<StaticDescriptorHeap*, 2> const& shaderHeaps)
+{
+	std::vector<ID3D12DescriptorHeap*> heaps;
+	for (auto* heap : shaderHeaps)
+	{
+		if (heap)
+		{
+			if (heap->GetHeapType() == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+			{
+				this->m_cbvSrvUavBindlessTable = heap->GetGpuHandle();
+			}
+
+			heaps.push_back(heap->GetNative());
+		}
+	}
+
+	this->m_internalList->SetDescriptorHeaps(heaps.size(), heaps.data());
 }
 
 void Dx12Core::Dx12CommandContext::TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState)
@@ -225,6 +255,7 @@ void Dx12Core::Dx12CommandContext::WriteBuffer(
 	size_t byteSize,
 	uint64_t destOffsetBytes)
 {
+	// TODO: See how the upload buffer can be used here
 	RefCountPtr<ID3D12Resource> intermediateResource;
 	ThrowIfFailed(
 		this->m_device->CreateCommittedResource(
@@ -250,6 +281,84 @@ void Dx12Core::Dx12CommandContext::WriteBuffer(
 	this->m_trackedResources->NativeResources.push_back(intermediateResource);
 }
 
+void Dx12Core::Dx12CommandContext::WriteTexture(
+	ITexture* texture,
+	uint32_t firstSubresource,
+	size_t numSubresources,
+	D3D12_SUBRESOURCE_DATA* subresourceData)
+{
+	Texture* internal = SafeCast<Texture*>(texture);
+	UINT64 requiredSize = GetRequiredIntermediateSize(internal->D3DResource, firstSubresource, numSubresources);
+
+	RefCountPtr<ID3D12Resource> intermediateResource;
+	ThrowIfFailed(
+		this->m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(requiredSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&intermediateResource)));
+
+	UpdateSubresources(
+		this->m_internalList,
+		internal->D3DResource,
+		intermediateResource,
+		0,
+		firstSubresource,
+		numSubresources,
+		subresourceData);
+
+	this->m_trackedResources->NativeResources.push_back(internal->D3DResource);
+	this->m_trackedResources->NativeResources.push_back(intermediateResource);
+}
+
+void Dx12Core::Dx12CommandContext::WriteTexture(
+	ITexture* texture,
+	uint32_t arraySlice,
+	uint32_t mipLevel,
+	const void* data,
+	size_t rowPitch,
+	size_t depthPitch)
+{
+	Texture* internal = SafeCast<Texture*>(texture);
+
+	// TODO: I AM HERE.
+	uint32_t subresource = 
+		CalcSubresource(
+			mipLevel,
+			arraySlice, 
+			0,
+			internal->GetDesc().MipLevels,
+			internal->GetDesc().ArraySize);
+
+	D3D12_RESOURCE_DESC resourceDesc = internal->D3DResource->GetDesc();
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+	uint32_t numRows;
+	uint64_t rowSizeInBytes;
+	uint64_t totalBytes;
+
+	this->m_device->GetCopyableFootprints(&resourceDesc, subresource, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
+
+	RefCountPtr<ID3D12Resource> intermediateResource;
+	ThrowIfFailed(
+		this->m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(totalBytes),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&intermediateResource)));
+}
+
+void Dx12Core::Dx12CommandContext::BindGraphics32BitConstants(
+	uint32_t rootParameterIndex,
+	uint32_t numConstants,
+	const void* constants)
+{
+	this->m_internalList->SetGraphicsRoot32BitConstants(rootParameterIndex, numConstants, constants, 0);
+}
+
 void Dx12Core::Dx12CommandContext::BindDynamicConstantBuffer(
 	size_t rootParameterIndex,
 	size_t sizeInBytes,
@@ -259,6 +368,14 @@ void Dx12Core::Dx12CommandContext::BindDynamicConstantBuffer(
 	std::memcpy(alloc.Cpu, bufferData, sizeInBytes);
 
 	this->m_internalList->SetGraphicsRootConstantBufferView(rootParameterIndex, alloc.Gpu);
+}
+
+void Dx12Core::Dx12CommandContext::BindBindlessDescriptorTables(size_t rootParamterIndex)
+{
+	if (m_cbvSrvUavBindlessTable.ptr != 0)
+	{
+		this->m_internalList->SetGraphicsRootDescriptorTable(rootParamterIndex, this->m_cbvSrvUavBindlessTable);
+	}
 }
 
 ScopedMarker Dx12Core::Dx12CommandContext::BeginScropedMarker(std::string name)

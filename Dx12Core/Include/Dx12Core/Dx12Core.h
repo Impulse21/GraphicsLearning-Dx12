@@ -8,6 +8,8 @@
 
 #include "ResourceId.h"
 
+#include <optional>
+
 #define ENUM_CLASS_FLAG_OPERATORS(T) \
     inline T operator | (T a, T b) { return T(uint32_t(a) | uint32_t(b)); } \
     inline T operator & (T a, T b) { return T(uint32_t(a) & uint32_t(b)); } /* NOLINT(bugprone-macro-parentheses) */ \
@@ -144,14 +146,21 @@ namespace Dx12Core
 
     struct TextureDesc
     {
-        uint32_t Width;
-        uint32_t Height;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        union
+        {
+            uint16_t ArraySize;
+            uint16_t Depth;
+        };
+
+        uint16_t MipLevels = 0;
 
         TextureDimension Dimension = TextureDimension::Unknown;
         BindFlags Bindings = BindFlags::None;
 
-        DXGI_FORMAT Format;
-        D3D12_CLEAR_VALUE OptmizedClearValue;
+        DXGI_FORMAT Format = DXGI_FORMAT_UNKNOWN;
+        std::optional<D3D12_CLEAR_VALUE> OptmizedClearValue;
         D3D12_RESOURCE_STATES InitialState = D3D12_RESOURCE_STATE_COMMON;
         std::string DebugName;
     };
@@ -294,7 +303,7 @@ namespace Dx12Core
 			D3D12_DESCRIPTOR_RANGE_FLAGS flags,
 			UINT offsetInDescriptorsFromTableStart)
 		{
-			CD3DX12_DESCRIPTOR_RANGE1& range = this->m_descriptorRanges.emplace_back();
+			CD3DX12_DESCRIPTOR_RANGE1& range = this->DescriptorRanges.emplace_back();
 			range.Init(type, numDescriptors, BaseShaderRegister, RegisterSpace, flags, offsetInDescriptorsFromTableStart);
 
 			return *this;
@@ -391,7 +400,7 @@ namespace Dx12Core
             D3D12_COMPARISON_FUNC	   comparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
             D3D12_STATIC_BORDER_COLOR  borderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE)
         {
-            CD3DX12_STATIC_SAMPLER_DESC& desc = m_staticSamplers.emplace_back();
+            CD3DX12_STATIC_SAMPLER_DESC& desc = this->StaticSamplers.emplace_back();
             desc.Init(
                 ShaderRegister,
                 filter,
@@ -548,6 +557,27 @@ namespace Dx12Core
         }
 
         virtual void WriteBuffer(IBuffer* buffer, const void* data, size_t dataSize, uint64_t destOffsetBytes = 0) = 0;
+        virtual void WriteTexture(
+            ITexture* texture,
+            uint32_t firstSubResource,
+            size_t numSubResources,
+            D3D12_SUBRESOURCE_DATA* subresourceData) = 0;
+
+        virtual void WriteTexture(
+            ITexture* texture,
+            uint32_t arraySlize,
+            uint32_t mipLevel,
+            const void* data,
+            size_t rowPitch,
+            size_t depthPitch) = 0;
+
+        virtual void BindGraphics32BitConstants(uint32_t rootParameterIndex, uint32_t numConstants, const void* constants) = 0;
+        template<typename T>
+        void BindGraphics32BitConstants(uint32_t rootParameterIndex, const T& constants)
+        {
+            static_assert(sizeof(T) % sizeof(uint32_t) == 0, "Size of type must be a multiple of 4 bytes");
+            this->BindGraphics32BitConstants(rootParameterIndex, sizeof(T) / sizeof(uint32_t), &constants);
+        }
 
         virtual void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) = 0;
         template<typename T>
@@ -555,6 +585,8 @@ namespace Dx12Core
         {
             this->BindDynamicConstantBuffer(rootParameterIndex, sizeof(T), &bufferData);
         }
+
+        virtual void BindBindlessDescriptorTables(size_t rootParamterIndex) = 0;
 
         virtual ScopedMarker BeginScropedMarker(std::string name) = 0;
         virtual void BeginMarker(std::string name) = 0;
@@ -590,6 +622,10 @@ namespace Dx12Core
         virtual uint64_t Submit(bool waitForCompletion = false) = 0;
 
         virtual void WaitForIdle() const = 0;
+
+    public:
+        virtual DescriptorIndex GetDescritporIndex(ITexture* texture) const = 0;
+        virtual DescriptorIndex GetDescritporIndex(IBuffer* buffer) const = 0;
 
     public:
         virtual TextureHandle CreateTexture(TextureDesc desc) = 0;

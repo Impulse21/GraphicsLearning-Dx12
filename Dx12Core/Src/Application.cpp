@@ -20,6 +20,7 @@ void Dx12Core::ApplicationDx12Base::Initialize(IGraphicsDevice* graphicsDevice)
 	this->CreateApplicationWindow(WindowProperties());
 
 	this->m_graphicsDevice = graphicsDevice;
+	this->m_textureStore = std::make_unique<TextureResourceStore>(graphicsDevice);
 
 	{
 		SwapChainDesc desc = {};

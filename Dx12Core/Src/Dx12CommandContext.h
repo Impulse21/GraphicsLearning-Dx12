@@ -17,6 +17,7 @@ namespace Dx12Core
 		std::vector<RefCountPtr<ID3D12Resource>> NativeResources;
 	};
 
+	class StaticDescriptorHeap;
 	class Dx12CommandContext : public RefCounter<ICommandContext>
 	{
 	public:
@@ -31,8 +32,11 @@ namespace Dx12Core
 
 		ID3D12GraphicsCommandList* GetInternal() { return this->m_internalList; }
 
+		void BindHeaps(std::array<StaticDescriptorHeap*, 2> const& shaderHeaps);
+
 		// -- Wrapped Commands ---
 	public:
+
 		void TransitionBarrier(ITexture* texture, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) override;
 		void TransitionBarrier(IBuffer* buffer, D3D12_RESOURCE_STATES beforeState, D3D12_RESOURCE_STATES afterState) override;
 		void ClearTextureFloat(ITexture* texture, Color const& clearColour) override;
@@ -49,14 +53,32 @@ namespace Dx12Core
 			uint32_t startInstance = 0) override;
 
 		void WriteBuffer(IBuffer* buffer, const void* data, size_t dataSize, uint64_t destOffsetBytes = 0) override;
+		void WriteTexture(
+			ITexture* texture,
+			uint32_t firstSubResource,
+			size_t numSubResources,
+			D3D12_SUBRESOURCE_DATA* subresourceData) override;
 
+		void WriteTexture(
+			ITexture* texture,
+			uint32_t arraySlize,
+			uint32_t mipLevel,
+			const void* data,
+			size_t rowPitch,
+			size_t depthPitch) override;
+
+
+		void BindGraphics32BitConstants(uint32_t rootParameterIndex, uint32_t numConstants, const void* constants) override;
 		void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) override;
+		void BindBindlessDescriptorTables(size_t rootParamterIndex) override;
 
 		virtual ScopedMarker BeginScropedMarker(std::string name) override;
 		virtual void BeginMarker(std::string name);
 		virtual void EndMarker();
 
 	private:
+		D3D12_GPU_DESCRIPTOR_HANDLE m_cbvSrvUavBindlessTable;
+
 		RefCountPtr<ID3D12Device2> m_device;
 		RefCountPtr<ID3D12GraphicsCommandList> m_internalList;
 		ID3D12CommandAllocator* m_allocator;
