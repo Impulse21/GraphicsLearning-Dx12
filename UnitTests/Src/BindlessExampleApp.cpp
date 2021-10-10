@@ -2,8 +2,8 @@
 #include "Dx12Core/Dx12Core.h"
 #include "Dx12Core/Application.h"
 
-#include "Shaders/TexturedCubeVS_compiled.h"
-#include "Shaders/TexturedCubePS_compiled.h"
+#include "Shaders/BindlessExampleVS_compiled.h"
+#include "Shaders/BindlessExamplePS_compiled.h"
 
 #include <DirectXMath.h>
 
@@ -29,9 +29,13 @@ struct DrawInfo
 	XMMATRIX ModelViewProjectionMatrix;
 };
 
-struct MaterialInfo
+struct GeometryData
 {
-	uint32_t albedoIndex;
+	uint32_t IndexBufferIndex;
+	uint32_t IndexOffset;
+	uint32_t VertexBufferIndex;
+	uint32_t VertexOffset;
+	uint32_t AlbedoTextureIndex;
 };
 
 namespace RootParameters
@@ -121,22 +125,17 @@ void BindlessExampleApp::LoadContent()
 	ShaderDesc d = {};
 	d.shaderType = ShaderType::Vertex;
 
-	ShaderHandle vs = this->GetDevice()->CreateShader(d, gTexturedCubeVS, sizeof(gTexturedCubeVS));
+	ShaderHandle vs = this->GetDevice()->CreateShader(d, gBindlessExampleVS, sizeof(gBindlessExampleVS));
 
 	d.shaderType = ShaderType::Pixel;
-	ShaderHandle ps = this->GetDevice()->CreateShader(d, gTexturedCubePS, sizeof(gTexturedCubePS));
+	ShaderHandle ps = this->GetDevice()->CreateShader(d, gBindlessExamplePS, sizeof(gBindlessExamplePS));
 
 	// TODO I AM HERE: Add Colour and push Constants
 	GraphicsPipelineDesc pipelineDesc = {};
-	pipelineDesc.InputLayout =
-	{ 
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOUR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-	};
+	pipelineDesc.InputLayout = {};
 
 	ShaderParameterLayout parameterLayout = {};
-	parameterLayout.AddConstantParameter<0, 0>(sizeof(MaterialInfo) / 4);
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(GeometryData) / 4);
 	parameterLayout.AddCBVParameter<1, 0>();
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
@@ -146,6 +145,7 @@ void BindlessExampleApp::LoadContent()
 	BindlessShaderParameterLayout bindlessParameterLayout = {};
 	bindlessParameterLayout.MaxCapacity = UINT_MAX;
 	bindlessParameterLayout.AddParameterSRV(100);
+	bindlessParameterLayout.AddParameterSRV(101);
 
 	pipelineDesc.VS = vs;
 	pipelineDesc.PS = ps;
@@ -153,7 +153,6 @@ void BindlessExampleApp::LoadContent()
 	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
 	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
 	pipelineDesc.UseShaderParameters = true;
-	pipelineDesc.ShaderParameters.AllowInputLayout();
 	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
 	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
 
@@ -164,7 +163,7 @@ void BindlessExampleApp::LoadContent()
 	this->CreateCube(1, this->m_vertices, this->m_indices, true);
 	{
 		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::VertexBuffer;
+		bufferDesc.BindFlags = BindFlags::ShaderResource;
 		bufferDesc.DebugName = L"Vertex Buffer";
 		bufferDesc.SizeInBytes = sizeof(Vertex) * this->m_vertices.size();
 		bufferDesc.StrideInBytes = sizeof(Vertex);
@@ -178,7 +177,7 @@ void BindlessExampleApp::LoadContent()
 
 	{
 		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::IndexBuffer;
+		bufferDesc.BindFlags = BindFlags::ShaderResource;
 		bufferDesc.DebugName = L"Index Buffer";
 		bufferDesc.SizeInBytes = sizeof(uint16_t) * this->m_indices.size();
 		bufferDesc.StrideInBytes = sizeof(uint16_t);
@@ -243,8 +242,6 @@ void BindlessExampleApp::Render()
 
 
 		GraphicsState s = {};
-		s.VertexBuffer = this->m_vertexbuffer;
-		s.IndexBuffer = this->m_indexBuffer;
 		s.PipelineState = this->m_pipelineState;
 		s.Viewports.push_back(Viewport(swapChainDesc.Width, swapChainDesc.Height));
 		s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
@@ -255,12 +252,16 @@ void BindlessExampleApp::Render()
 
 		gfxContext.SetGraphicsState(s);
 
-		MaterialInfo matInfo = {};
-		matInfo.albedoIndex = this->GetDevice()->GetDescritporIndex(this->m_cubeTexture);
+		GeometryData geometryData= {};
+		geometryData.VertexBufferIndex = this->GetDevice()->GetDescritporIndex(this->m_vertexbuffer);
+		geometryData.VertexOffset = 0;
+		geometryData.IndexBufferIndex = this->GetDevice()->GetDescritporIndex(this->m_indexBuffer);
+		geometryData.IndexOffset = 0;
+		geometryData.AlbedoTextureIndex= this->GetDevice()->GetDescritporIndex(this->m_cubeTexture);
 
-		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, matInfo);
+		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, geometryData);
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-		gfxContext.DrawIndexed(this->m_indices.size());
+		gfxContext.Draw(this->m_indices.size());
 	}
 
 	{

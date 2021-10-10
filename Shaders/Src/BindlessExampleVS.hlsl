@@ -6,12 +6,14 @@ struct DrawInfo
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b1);
+ByteAddressBuffer BufferTable[] : register(t0, BufferSpace);
 
-struct VSInput
+struct Vertex
 {
     float3 Pos      : POSITION;
     float3 Colour   : COLOUR;
     float2 TexCoord : TEXCOORD;
+
 };
 
 struct VsOutput
@@ -21,13 +23,19 @@ struct VsOutput
     float4 Position : SV_POSITION;
 };
 
-VsOutput main(VSInput input)
+VsOutput main(in uint vertexID : SV_VertexID)
 {
     VsOutput output;
- 
-    output.Position = mul(DrawInfoCB.modelViewProjectMatrix, float4(input.Pos, 1.0f));
-    output.TexCoord = input.TexCoord;
-    output.Colour = float4(input.Colour, 1.0f);
+    
+    ByteAddressBuffer indexBuffer = BufferTable[GeometryDataCB.IndexBufferIndex];
+    ByteAddressBuffer vertexBuffer = BufferTable[GeometryDataCB.VertexBufferIndex];
+    
+    uint index = indexBuffer.Load((GeometryDataCB.IndexOffset + vertexID) * 4);
+    Vertex vert = BufferTable[GeometryDataCB.VertexBufferIndex].Load<Vertex>((GeometryDataCB.VertexOffset + index) * 4);
+    
+    output.Position = mul(DrawInfoCB.modelViewProjectMatrix, float4(vert.Pos, 1.0f));
+    output.TexCoord = vert.TexCoord;
+    output.Colour = float4(vert.Colour, 1.0f);
     
     return output;
 }

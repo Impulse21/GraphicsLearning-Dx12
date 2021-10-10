@@ -185,7 +185,7 @@ DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(ITexture* texture) 
 
 DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(IBuffer* buffer) const
 {
-	Texture* internal = SafeCast<Texture*>(buffer);
+	Buffer* internal = SafeCast<Buffer*>(buffer);
 
 	return internal->Srv.GetIndex();
 }
@@ -241,7 +241,6 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 	{
 		internal->Srv = this->m_shaderResourceViewHeap->AllocateDescriptor();
 
-		// TODO: I AM HERE
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -312,6 +311,22 @@ BufferHandle Dx12Core::GraphicsDevice::CreateBuffer(BufferDesc desc)
 			? DXGI_FORMAT_R32_UINT
 			: DXGI_FORMAT_R16_UINT;
 		view.SizeInBytes = internal->GetDesc().SizeInBytes;
+	}
+	else if (BindFlags::ShaderResource == (internal->GetDesc().BindFlags | BindFlags::ShaderResource))
+	{
+		internal->Srv = this->m_shaderResourceViewHeap->AllocateDescriptor();
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = internal->GetDesc().SizeInBytes/ internal->GetDesc().StrideInBytes;
+		srvDesc.Buffer.StructureByteStride = internal->GetDesc().StrideInBytes;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+
+		this->m_context.Device2->CreateShaderResourceView(
+			internal->D3DResource,
+			&srvDesc,
+			internal->Srv.GetCpuHandle());
 	}
 
 	return BufferHandle::Create(internal.release());
