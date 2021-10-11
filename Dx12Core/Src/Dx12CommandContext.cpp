@@ -330,9 +330,9 @@ void Dx12Core::Dx12CommandContext::WriteTexture(
 	size_t rowPitch,
 	size_t depthPitch)
 {
+	assert(false);
 	Texture* internal = SafeCast<Texture*>(texture);
 
-	// TODO: I AM HERE.
 	uint32_t subresource = 
 		CalcSubresource(
 			mipLevel,
@@ -358,6 +358,19 @@ void Dx12Core::Dx12CommandContext::WriteTexture(
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
 			IID_PPV_ARGS(&intermediateResource)));
+
+
+	assert(numRows <= footprint.Footprint.Height);
+
+	for (uint32_t depthSlice = 0; depthSlice < footprint.Footprint.Depth; depthSlice++)
+	{
+		for (uint32_t row = 0; row < numRows; row++)
+		{
+			void* destAddress = (char*)data + footprint.Footprint.RowPitch * (row + depthSlice * numRows);
+			const void* srcAddress = (const char*)data + rowPitch * row + depthPitch * depthSlice;
+			memcpy(destAddress, srcAddress, std::min(rowPitch, rowSizeInBytes));
+		}
+	}
 }
 
 void Dx12Core::Dx12CommandContext::BindGraphics32BitConstants(

@@ -28,9 +28,19 @@ target_include_directories(TexturedCubeApp PUBLIC ../Dx12Core/Include ../ThirdPa
 
 set_target_properties(TexturedCubeApp PROPERTIES FOLDER "UnitTests")
 
+
+# set the project name and version
 add_executable(BindlessExample Src/BindlessExampleApp.cpp)
 
 target_link_libraries(BindlessExample d3d12.lib dxgi.lib Shaders Dx12Core DirectXTex)
 target_include_directories(BindlessExample PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include ../ThirdParty/DirectXTex/DirectXTex)
 
 set_target_properties(BindlessExample PROPERTIES FOLDER "UnitTests")
+
+# set the project name and version
+add_executable(ImguiApp Src/ImguiApp.cpp)
+
+target_link_libraries(ImguiApp d3d12.lib dxgi.lib Shaders Dx12Core DirectXTex)
+target_include_directories(ImguiApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include ../ThirdParty/DirectXTex/DirectXTex ../ThridParty/Imgui)
+
+set_target_properties(ImguiApp PROPERTIES FOLDER "UnitTests")
