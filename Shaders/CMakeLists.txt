@@ -19,6 +19,7 @@ set(shader_source_ps
 set(shader_headers
     Src/BindlessExample.hlsli)
 
+
 set(shader_source_includes
     Include/Shaders/TriangleVS_compiled.h
     Include/Shaders/TrianglePS_compiled.h
