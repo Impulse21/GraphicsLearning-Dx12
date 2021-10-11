@@ -31,7 +31,6 @@ struct DrawInfo
 
 struct GeometryData
 {
-	uint32_t IndexBufferIndex;
 	uint32_t IndexOffset;
 	uint32_t VertexBufferIndex;
 	uint32_t VertexOffset;
@@ -44,14 +43,14 @@ namespace RootParameters
 	{
 		PushConstant = 0,
 		DrawInfoCB,
-		TextureSRV,
+		IndexBufferSB,
 		Sampler,
 		Count
 	};
 }
 
 // Helper for flipping winding of geometric primitives for LH vs. RH coords
-static void ReverseWinding(std::vector<uint16_t>& indices, std::vector<Vertex>& vertices)
+static void ReverseWinding(std::vector<uint32_t>& indices, std::vector<Vertex>& vertices)
 {
 	assert((indices.size() % 3) == 0);
 	for (auto it = indices.begin(); it != indices.end(); it += 3)
@@ -70,7 +69,7 @@ protected:
 	void Update(double elapsedTime) override;
 	void Render() override;
 
-	void CreateCube(float size, std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices, bool rhsCoord = false);
+	void CreateCube(float size, std::vector<Vertex>& outVertices, std::vector<uint32_t>& outIndices, bool rhsCoord = false);
 
 private:
 	void XM_CALLCONV ComputeMatrices(FXMMATRIX model, CXMMATRIX view, CXMMATRIX projection, DrawInfo& drawInfo);
@@ -87,7 +86,7 @@ private:
 	TextureHandle m_cubeTexture;
 
 	std::vector<Vertex> m_vertices;
-	std::vector<uint16_t> m_indices;
+	std::vector<uint32_t> m_indices;
 };
 
 
@@ -137,6 +136,7 @@ void BindlessExampleApp::LoadContent()
 	ShaderParameterLayout parameterLayout = {};
 	parameterLayout.AddConstantParameter<0, 0>(sizeof(GeometryData) / 4);
 	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddSRVParameter<0, 0>();
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -172,20 +172,20 @@ void BindlessExampleApp::LoadContent()
 
 		// Upload Buffer
 		copyContext.WriteBuffer<Vertex>(this->m_vertexbuffer, this->m_vertices);
-		copyContext.TransitionBarrier(this->m_vertexbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		copyContext.TransitionBarrier(this->m_vertexbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	{
 		BufferDesc bufferDesc = {};
 		bufferDesc.BindFlags = BindFlags::ShaderResource;
 		bufferDesc.DebugName = L"Index Buffer";
-		bufferDesc.SizeInBytes = sizeof(uint16_t) * this->m_indices.size();
-		bufferDesc.StrideInBytes = sizeof(uint16_t);
+		bufferDesc.SizeInBytes = sizeof(uint32_t) * this->m_indices.size();
+		bufferDesc.StrideInBytes = sizeof(uint32_t);
 
 		this->m_indexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
 
-		copyContext.WriteBuffer<uint16_t>(this->m_indexBuffer, this->m_indices);
-		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+		copyContext.WriteBuffer<uint32_t>(this->m_indexBuffer, this->m_indices);
+		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	// TODO: Better deal with asset paths.
@@ -255,12 +255,12 @@ void BindlessExampleApp::Render()
 		GeometryData geometryData= {};
 		geometryData.VertexBufferIndex = this->GetDevice()->GetDescritporIndex(this->m_vertexbuffer);
 		geometryData.VertexOffset = 0;
-		geometryData.IndexBufferIndex = this->GetDevice()->GetDescritporIndex(this->m_indexBuffer);
 		geometryData.IndexOffset = 0;
 		geometryData.AlbedoTextureIndex= this->GetDevice()->GetDescritporIndex(this->m_cubeTexture);
 
 		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, geometryData);
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
+		gfxContext.BindStructuredBuffer(RootParameters::IndexBufferSB, this->m_indexBuffer);
 		gfxContext.Draw(this->m_indices.size());
 	}
 
@@ -275,7 +275,7 @@ void BindlessExampleApp::Render()
 void BindlessExampleApp::CreateCube(
 	float size,
 	std::vector<Vertex>& outVertices,
-	std::vector<uint16_t>& outIndices,
+	std::vector<uint32_t>& outIndices,
 	bool rhsCoord)
 {
 	// A cube has six faces, each one pointing in a different direction.

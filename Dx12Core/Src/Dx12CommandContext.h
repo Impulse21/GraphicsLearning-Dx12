@@ -70,6 +70,7 @@ namespace Dx12Core
 
 		void BindGraphics32BitConstants(uint32_t rootParameterIndex, uint32_t numConstants, const void* constants) override;
 		void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) override;
+		void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) override;
 		void BindBindlessDescriptorTables(size_t rootParamterIndex) override;
 
 		virtual ScopedMarker BeginScropedMarker(std::string name) override;

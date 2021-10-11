@@ -379,6 +379,13 @@ void Dx12Core::Dx12CommandContext::BindDynamicConstantBuffer(
 	this->m_internalList->SetGraphicsRootConstantBufferView(rootParameterIndex, alloc.Gpu);
 }
 
+void Dx12Core::Dx12CommandContext::BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer)
+{
+	Buffer* internal = SafeCast<Buffer*>(buffer);
+
+	this->m_internalList->SetGraphicsRootShaderResourceView(rootParameterIndex, internal->D3DResource->GetGPUVirtualAddress());
+}
+
 void Dx12Core::Dx12CommandContext::BindBindlessDescriptorTables(size_t rootParamterIndex)
 {
 	if (m_cbvSrvUavBindlessTable.ptr != 0)
