@@ -43,7 +43,6 @@ namespace RootParameters
 	{
 		PushConstant = 0,
 		DrawInfoCB,
-		IndexBufferSB,
 		Sampler,
 		Count
 	};
@@ -177,7 +176,7 @@ void BindlessExampleApp::LoadContent()
 
 	{
 		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::ShaderResource;
+		bufferDesc.BindFlags = BindFlags::IndexBuffer;
 		bufferDesc.DebugName = L"Index Buffer";
 		bufferDesc.SizeInBytes = sizeof(uint32_t) * this->m_indices.size();
 		bufferDesc.StrideInBytes = sizeof(uint32_t);
@@ -185,7 +184,7 @@ void BindlessExampleApp::LoadContent()
 		this->m_indexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
 
 		copyContext.WriteBuffer<uint32_t>(this->m_indexBuffer, this->m_indices);
-		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 
 	// TODO: Better deal with asset paths.
@@ -245,6 +244,7 @@ void BindlessExampleApp::Render()
 		s.PipelineState = this->m_pipelineState;
 		s.Viewports.push_back(Viewport(swapChainDesc.Width, swapChainDesc.Height));
 		s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
+		s.IndexBuffer = this->m_indexBuffer;
 
 		// TODO: Device should return a handle rather then a week refernce so the context
 		// can track the resource.
@@ -260,8 +260,7 @@ void BindlessExampleApp::Render()
 
 		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, geometryData);
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-		gfxContext.BindStructuredBuffer(RootParameters::IndexBufferSB, this->m_indexBuffer);
-		gfxContext.Draw(this->m_indices.size());
+		gfxContext.DrawIndexed(this->m_indices.size());
 	}
 
 	{

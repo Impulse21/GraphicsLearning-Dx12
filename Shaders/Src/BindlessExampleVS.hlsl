@@ -6,7 +6,6 @@ struct DrawInfo
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b1);
-StructuredBuffer<uint> IndexBuffer : register(t0);
 ByteAddressBuffer BufferTable[] : register(t0, BufferSpace);
 
 struct Vertex
@@ -29,9 +28,7 @@ VsOutput main(in uint vertexID : SV_VertexID)
     VsOutput output;
     
     ByteAddressBuffer vertexBuffer = BufferTable[GeometryDataCB.VertexBufferIndex];
-    
-    uint index = IndexBuffer[vertexID];
-    Vertex vert = BufferTable[GeometryDataCB.VertexBufferIndex].Load<Vertex>((GeometryDataCB.VertexOffset + index) * sizeof(Vertex));
+    Vertex vert = BufferTable[GeometryDataCB.VertexBufferIndex].Load<Vertex>((GeometryDataCB.VertexOffset + vertexID) * sizeof(Vertex));
     
     output.Position = mul(DrawInfoCB.modelViewProjectMatrix, float4(vert.Pos, 1.0f));
     output.TexCoord = vert.TexCoord;
