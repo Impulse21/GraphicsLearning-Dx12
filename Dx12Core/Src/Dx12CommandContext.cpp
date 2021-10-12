@@ -216,7 +216,7 @@ void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
 	{
 		Texture* t = SafeCast<Texture*>(state.DepthStencil.Get());
 
-		renderTargetViews.push_back(t->Dsv.GetCpuHandle());
+		depthView = t->Dsv.GetCpuHandle();
 		this->m_trackedResources->Resources.push_back(state.DepthStencil);
 		hasDepth = true;
 	}
