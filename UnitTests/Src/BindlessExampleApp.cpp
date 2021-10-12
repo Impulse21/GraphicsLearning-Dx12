@@ -249,6 +249,7 @@ void BindlessExampleApp::Render()
 		// TODO: Device should return a handle rather then a week refernce so the context
 		// can track the resource.
 		s.RenderTargets.push_back(this->GetDevice()->GetCurrentBackBuffer());
+		s.DepthStencil = this->m_depthBuffer;
 
 		gfxContext.SetGraphicsState(s);
 
