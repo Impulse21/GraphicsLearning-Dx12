@@ -69,6 +69,7 @@ namespace Dx12Core
 
 		IGraphicsDevice* GetDevice() { return this->m_graphicsDevice; }
 		TextureResourceStore* GetTextureStore() { return this->m_textureStore.get(); }
+		GLFWwindow* GetWindow() { return this->m_window; }
 
 	private:
 		void CreateApplicationWindow(WindowProperties properties);

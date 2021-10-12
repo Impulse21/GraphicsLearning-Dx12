@@ -15,8 +15,11 @@ namespace Dx12Core
 
 		void Initialize(GLFWwindow* glfwWindow, IGraphicsDevice* device);
 
+		void BeginFrame();
+		void Draw(ICommandContext& commandContext, IGraphicsDevice* device);
+
 	private:
-		void CreatePso();
+		void CreatePso(IGraphicsDevice* device);
 
 	private:
 		ImGuiContext* m_imguiContext;

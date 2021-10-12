@@ -43,6 +43,7 @@ namespace Dx12Core
 		void ClearDepthStencilTexture(ITexture* depthStencil, bool clearDepth, float depth, bool clearStencil, uint8_t stencil) override;
 
 		void SetGraphicsState(GraphicsState& state) override;
+		void BindScissorRects(std::vector<Rect> const& rects) override;
 
 		void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) override;
 		void DrawIndexed(
@@ -70,6 +71,9 @@ namespace Dx12Core
 
 		void BindGraphics32BitConstants(uint32_t rootParameterIndex, uint32_t numConstants, const void* constants) override;
 		void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) override;
+		void BindDynamicVertexBuffer(uint32_t slot, size_t numVertices, size_t vertexSize, const void* vertexBufferData);
+		void BindDynamicIndexBuffer(size_t numIndicies, DXGI_FORMAT indexFormat, const void* indexBufferData);
+
 		void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) override;
 		void BindBindlessDescriptorTables(size_t rootParamterIndex) override;
 

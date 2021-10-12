@@ -350,6 +350,9 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 		CD3DX12_PIPELINE_STATE_STREAM_PRIMITIVE_TOPOLOGY PrimitiveTopologyType;
 		CD3DX12_PIPELINE_STATE_STREAM_VS VS;
 		CD3DX12_PIPELINE_STATE_STREAM_PS PS;
+		CD3DX12_PIPELINE_STATE_STREAM_RASTERIZER RasterizerState;
+		CD3DX12_PIPELINE_STATE_STREAM_DEPTH_STENCIL DepthStencilState;
+		CD3DX12_PIPELINE_STATE_STREAM_BLEND_DESC BlendState;
 		CD3DX12_PIPELINE_STATE_STREAM_DEPTH_STENCIL_FORMAT DSVFormat;
 		CD3DX12_PIPELINE_STATE_STREAM_RENDER_TARGET_FORMATS RTVFormats;
 	} pipelineStateStream;
@@ -373,7 +376,6 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 
 	pipelineStateStream.InputLayout = { desc.InputLayout.data(), static_cast<UINT>(desc.InputLayout.size()) };
 
-	// pipelineStateStream.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 	D3D12_RT_FORMAT_ARRAY rtvFormats = {};
 	rtvFormats.NumRenderTargets = std::min(8U, (UINT)desc.RenderState.RtvFormats.size());
@@ -383,6 +385,26 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 	}
 
 	pipelineStateStream.RTVFormats = rtvFormats;
+
+	if (desc.RenderState.DsvFormat != DXGI_FORMAT_UNKNOWN)
+	{
+		pipelineStateStream.DSVFormat = desc.RenderState.DsvFormat;
+	}
+
+	if (desc.RenderState.RasterizerState)
+	{
+		pipelineStateStream.RasterizerState = *desc.RenderState.RasterizerState;
+	}
+
+	if (desc.RenderState.DepthStencilState)
+	{
+		pipelineStateStream.DepthStencilState = *desc.RenderState.DepthStencilState;
+	}
+
+	if (desc.RenderState.BlendState)
+	{
+		pipelineStateStream.BlendState = *desc.RenderState.BlendState;
+	}
 
 	D3D12_PIPELINE_STATE_STREAM_DESC pipelineStateStreamDesc = 
 	{ 

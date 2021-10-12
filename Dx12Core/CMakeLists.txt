@@ -16,7 +16,8 @@ set(dx12_core_include_files
     Include/Dx12Core/Dx12CommandAllocatorPool.h
     Include/Dx12Core/ResourceId.h
     Include/Dx12Core/ResouceIdOwner.h
-    Include/Dx12Core/ResourceStore.h)
+    Include/Dx12Core/ResourceStore.h
+    Include/Dx12Core/ImGui/ImguiRenderer.h)
 
 set(dx12_core_src_files
     Src/Application.cpp
@@ -37,7 +38,6 @@ set(dx12_core_src_files
     Src/ResourceStore.cpp
     Src/ImGui/imgui_impl_glfw.h
     Src/ImGui/imgui_impl_glfw.cpp
-    Src/ImGui/ImguiRenderer.h
     Src/ImGui/ImguiRenderer.cpp)
 
 add_library(Dx12Core STATIC 
@@ -46,7 +46,7 @@ add_library(Dx12Core STATIC
 
 target_link_libraries(Dx12Core d3d12.lib dxgi.lib dxguid.lib DirectXTex)
 
-target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw ../ThirdParty/DirectXTex/DirectXTex Dx12Headers ../ThirdParty/imgui)
+target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw ../ThirdParty/DirectXTex/DirectXTex Dx12Headers ../ThirdParty/imgui ../Shaders/Include)
 
 
 set_property(TARGET Dx12Core PROPERTY CXX_STANDARD 17)

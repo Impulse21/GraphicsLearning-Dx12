@@ -187,20 +187,8 @@ void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
 	}
 	this->m_internalList->RSSetViewports(numViewports, dx12Viewports);
 
-	this->m_numScissor = state.ScissorRect.size();
-	for (int i = 0; i < this->m_numScissor; i++)
-	{
-		Rect& scissor = state.ScissorRect[i];
-
-		this->m_dx12Scissor[i] = CD3DX12_RECT(
-			scissor.MinX,
-			scissor.MinY,
-			scissor.MaxX,
-			scissor.MaxY);
-	}
+	this->BindScissorRects(state.ScissorRect);
 	
-	this->m_internalList->RSSetScissorRects(this->m_numScissor, this->m_dx12Scissor);
-
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> renderTargetViews;
 	for (auto renderTarget : state.RenderTargets)
 	{
@@ -241,6 +229,23 @@ void Dx12Core::Dx12CommandContext::SetGraphicsState(GraphicsState& state)
 		this->m_internalList->IASetIndexBuffer(&b->IndexView);
 		this->m_trackedResources->NativeResources.push_back(b->D3DResource);
 	}
+}
+
+void Dx12Core::Dx12CommandContext::BindScissorRects(std::vector<Rect> const& rects)
+{
+	this->m_numScissor = rects.size();
+	for (int i = 0; i < this->m_numScissor; i++)
+	{
+		const Rect& scissor = rects[i];
+
+		this->m_dx12Scissor[i] = CD3DX12_RECT(
+			scissor.MinX,
+			scissor.MinY,
+			scissor.MaxX,
+			scissor.MaxY);
+	}
+
+	this->m_internalList->RSSetScissorRects(this->m_numScissor, this->m_dx12Scissor);
 }
 
 void Dx12Core::Dx12CommandContext::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t startVertex, uint32_t startInstance)
@@ -390,6 +395,36 @@ void Dx12Core::Dx12CommandContext::BindDynamicConstantBuffer(
 	std::memcpy(alloc.Cpu, bufferData, sizeInBytes);
 
 	this->m_internalList->SetGraphicsRootConstantBufferView(rootParameterIndex, alloc.Gpu);
+}
+
+void Dx12Core::Dx12CommandContext::BindDynamicVertexBuffer(uint32_t slot, size_t numVertices, size_t vertexSize, const void* vertexBufferData)
+{
+	size_t bufferSize = numVertices * vertexSize;
+	auto heapAllocation = this->m_uploadBuffer->Allocate(bufferSize, vertexSize);
+	memcpy(heapAllocation.Cpu, vertexBufferData, bufferSize);
+
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
+	vertexBufferView.BufferLocation = heapAllocation.Gpu;
+	vertexBufferView.SizeInBytes = static_cast<UINT>(bufferSize);
+	vertexBufferView.StrideInBytes = static_cast<UINT>(vertexSize);
+
+	this->m_internalList->IASetVertexBuffers(slot, 1, &vertexBufferView);
+}
+
+void Dx12Core::Dx12CommandContext::BindDynamicIndexBuffer(size_t numIndicies, DXGI_FORMAT indexFormat, const void* indexBufferData)
+{
+	size_t indexSizeInBytes = indexFormat == DXGI_FORMAT_R16_UINT ? 2 : 4;
+	size_t bufferSize = numIndicies * indexSizeInBytes;
+
+	auto heapAllocation = this->m_uploadBuffer->Allocate(bufferSize, indexSizeInBytes);
+	memcpy(heapAllocation.Cpu, indexBufferData, bufferSize);
+
+	D3D12_INDEX_BUFFER_VIEW indexBufferView = {};
+	indexBufferView.BufferLocation = heapAllocation.Gpu;
+	indexBufferView.SizeInBytes = static_cast<UINT>(bufferSize);
+	indexBufferView.Format = indexFormat;
+
+	this->m_internalList->IASetIndexBuffer(&indexBufferView);
 }
 
 void Dx12Core::Dx12CommandContext::BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer)

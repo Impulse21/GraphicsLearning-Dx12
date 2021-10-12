@@ -597,7 +597,9 @@ namespace Dx12Core
     {
         std::vector<DXGI_FORMAT> RtvFormats;
         DXGI_FORMAT DsvFormat;
-
+        CD3DX12_DEPTH_STENCIL_DESC* DepthStencilState = nullptr;
+        CD3DX12_BLEND_DESC* BlendState = nullptr;
+        CD3DX12_RASTERIZER_DESC* RasterizerState = nullptr;
     };
 
     struct GraphicsPipelineDesc
@@ -700,6 +702,7 @@ namespace Dx12Core
         virtual void ClearDepthStencilTexture(ITexture* depthStencil, bool clearDepth, float depth, bool clearStencil, uint8_t stencil) = 0;
 
         virtual void SetGraphicsState(GraphicsState& state) = 0;
+        virtual void BindScissorRects(std::vector<Rect> const& rects) = 0;
 
         virtual void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t startVertex = 0, uint32_t startInstance = 0) = 0;
         virtual void DrawIndexed(
@@ -743,6 +746,31 @@ namespace Dx12Core
         void BindDynamicConstantBuffer(size_t rootParameterIndex, T const& bufferData)
         {
             this->BindDynamicConstantBuffer(rootParameterIndex, sizeof(T), &bufferData);
+        }
+
+        /**
+         * Set dynamic vertex buffer data to the rendering pipeline.
+         */
+        virtual void BindDynamicVertexBuffer(uint32_t slot, size_t numVertices, size_t vertexSize, const void* vertexBufferData) = 0;
+
+        template<typename T>
+        void BindDynamicVertexBuffer(uint32_t slot, const std::vector<T>& vertexBufferData)
+        {
+            this->SetDynamicVertexBuffer(slot, vertexBufferData.size(), sizeof(T), vertexBufferData.data());
+        }
+
+        /**
+         * Bind dynamic index buffer data to the rendering pipeline.
+         */
+        virtual void BindDynamicIndexBuffer(size_t numIndicies, DXGI_FORMAT indexFormat, const void* indexBufferData) = 0;
+
+        template<typename T>
+        void BindDynamicIndexBuffer(const std::vector<T>& indexBufferData)
+        {
+            static_assert(sizeof(T) == 2 || sizeof(T) == 4);
+
+            DXGI_FORMAT indexFormat = (sizeof(T) == 2) ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+            SetDynamicIndexBuffer(indexBufferData.size(), indexFormat, indexBufferData.data());
         }
 
         virtual void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) = 0;
