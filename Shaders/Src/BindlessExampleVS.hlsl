@@ -27,11 +27,8 @@ VsOutput main(in uint vertexID : SV_VertexID)
 {
     VsOutput output;
     
-    ByteAddressBuffer indexBuffer = BufferTable[GeometryDataCB.IndexBufferIndex];
     ByteAddressBuffer vertexBuffer = BufferTable[GeometryDataCB.VertexBufferIndex];
-    
-    uint index = indexBuffer.Load((GeometryDataCB.IndexOffset + vertexID) * 4);
-    Vertex vert = BufferTable[GeometryDataCB.VertexBufferIndex].Load<Vertex>((GeometryDataCB.VertexOffset + index) * 4);
+    Vertex vert = BufferTable[GeometryDataCB.VertexBufferIndex].Load<Vertex>((GeometryDataCB.VertexOffset + vertexID) * sizeof(Vertex));
     
     output.Position = mul(DrawInfoCB.modelViewProjectMatrix, float4(vert.Pos, 1.0f));
     output.TexCoord = vert.TexCoord;

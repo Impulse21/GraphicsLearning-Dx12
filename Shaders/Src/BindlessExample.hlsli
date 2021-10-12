@@ -8,7 +8,6 @@
 
 struct GeometryData
 {
-    uint IndexBufferIndex;
     uint IndexOffset;
     uint VertexBufferIndex;
     uint VertexOffset;

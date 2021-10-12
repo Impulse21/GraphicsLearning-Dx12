@@ -53,7 +53,7 @@ namespace Dx12Core
 
 		const GraphicsPipelineDesc& GetDesc() const override { return this->m_desc; }
 
-		bool HasBindlessParamaters;
+		bool HasBindlessParamaters = false;
 		D3D12_GPU_DESCRIPTOR_HANDLE bindlessResourceTable;
 		// TODO: D3D12_GPU_DESCRIPTOR_HANDLE bindlessSamplerTable;
 

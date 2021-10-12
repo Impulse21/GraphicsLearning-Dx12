@@ -745,6 +745,9 @@ namespace Dx12Core
             this->BindDynamicConstantBuffer(rootParameterIndex, sizeof(T), &bufferData);
         }
 
+        virtual void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) = 0;
+
+        // Depericated
         virtual void BindBindlessDescriptorTables(size_t rootParamterIndex) = 0;
 
         virtual ScopedMarker BeginScropedMarker(std::string name) = 0;
