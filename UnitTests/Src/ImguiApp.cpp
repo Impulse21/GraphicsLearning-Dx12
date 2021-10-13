@@ -35,21 +35,6 @@ CREATE_APPLICATION(ImGuiApp)
 
 void ImGuiApp::LoadContent()
 {
-
-	{
-		TextureDesc desc = {};
-		desc.Format = DXGI_FORMAT_D32_FLOAT;
-		desc.Width = this->GetDevice()->GetCurrentSwapChainDesc().Width;
-		desc.Height = this->GetDevice()->GetCurrentSwapChainDesc().Height;
-		desc.Dimension = TextureDimension::Texture2D;
-		desc.DebugName = "Depth Buffer";
-		desc.InitialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-		D3D12_CLEAR_VALUE clearValue = {};
-		clearValue.DepthStencil = { 1.0f, 0 };
-		desc.OptmizedClearValue = std::make_optional(clearValue);
-
-		this->m_depthBuffer = this->GetDevice()->CreateTexture(desc);
-	}
 	this->m_imguiRenderer = std::make_unique<ImGuiRenderer>();
 
 	this->m_imguiRenderer->Initialize(this->GetWindow(), this->GetDevice());
@@ -73,8 +58,6 @@ void ImGuiApp::Render()
 		gfxContext.TransitionBarrier(backBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 		gfxContext.ClearTextureFloat(backBuffer, { 0.0f, 0.0f, 0.0f, 1.0f });
-
-		gfxContext.ClearDepthStencilTexture(this->m_depthBuffer, true, 1.0f, false, 0);
 	}
 
 	{

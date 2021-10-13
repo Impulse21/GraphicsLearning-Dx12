@@ -10,9 +10,9 @@ ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
 
 struct VSInput
 {
-    float3 Position : POSITION;
-    float3 Colour : COLOR;
+    float2 Position : POSITION;
     float2 TexCoord : TEXCOORD;
+    float4 Color : COLOR;
 };
 
 struct VSOutput
@@ -27,7 +27,7 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
     output.Position = mul(DrawInfoCB.mvp, float4(input.Position.xy, 0.f, 1.f));
-    output.Colour = float4(input.Colour, 1.0f);
+    output.Colour = input.Color;
     output.TexCoord = input.TexCoord;
     
     return output;

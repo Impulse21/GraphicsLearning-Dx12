@@ -68,6 +68,7 @@ void Dx12Core::ImGuiRenderer::Initialize(GLFWwindow* glfwWindow, IGraphicsDevice
 	subresource.pData = pixelData;
 
 	copyContext.WriteTexture(this->m_fontTexture, 0, 1, &subresource);
+	copyContext.TransitionBarrier(this->m_fontTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	// copyContext.WriteTexture(this->m_fontTexture, 0, 0, pixelData, width * 4, 0);
 	device->Submit();
 
@@ -169,7 +170,7 @@ void Dx12Core::ImGuiRenderer::Draw(ICommandContext& commandContext, IGraphicsDev
                     scissorRect.MaxY - scissorRect.MinY > 0.0)
                 {
 					commandContext.BindScissorRects({ scissorRect });
-                    commandContext.DrawIndexed(drawCmd.ElemCount, indexOffset, 0);
+                    commandContext.DrawIndexed(drawCmd.ElemCount, 1, indexOffset);
                 }
             }
             indexOffset += drawCmd.ElemCount;
