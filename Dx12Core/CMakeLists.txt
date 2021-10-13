@@ -17,6 +17,7 @@ set(dx12_core_include_files
     Include/Dx12Core/ResourceId.h
     Include/Dx12Core/ResouceIdOwner.h
     Include/Dx12Core/ResourceStore.h
+    Include/Dx12Core/MeshPrefabs.h
     Include/Dx12Core/ImGui/ImguiRenderer.h)
 
 set(dx12_core_src_files
@@ -36,6 +37,7 @@ set(dx12_core_src_files
     Src/Dx12UploadBuffer.h
     Src/Dx12UploadBuffer.cpp
     Src/ResourceStore.cpp
+    Src/MeshPrefabs.cpp
     Src/ImGui/imgui_impl_glfw.h
     Src/ImGui/imgui_impl_glfw.cpp
     Src/ImGui/ImguiRenderer.cpp)

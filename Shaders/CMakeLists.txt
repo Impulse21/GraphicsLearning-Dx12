@@ -9,14 +9,16 @@ set(shader_source_vs
     Src/CubeVS.hlsl
     Src/TexturedCubeVS.hlsl
     Src/BindlessExampleVS.hlsl
-    Src/ImGuiVS.hlsl)
+    Src/ImGuiVS.hlsl
+    Src/PbrDemoVS.hlsl)
     
 set(shader_source_ps
     Src/TrianglePS.hlsl
     Src/CubePS.hlsl
     Src/TexturedCubePS.hlsl
     Src/BindlessExamplePS.hlsl
-    Src/ImGuiPS.hlsl)
+    Src/ImGuiPS.hlsl
+    Src/PbrDemoPS.hlsl)
 
 set(shader_headers
     Src/Defines.hlsli
@@ -33,7 +35,9 @@ set(shader_source_includes
     Include/Shaders/BindlessExampleVS_compiled.h
     Include/Shaders/BindlessExamplePS_compiled.h
     Include/Shaders/ImGuiVS_compiled.h
-    Include/Shaders/ImGuiPS_compiled.h)
+    Include/Shaders/ImGuiPS_compiled.h
+    Include/Shaders/PbrDemoVS_compiled.h
+    Include/Shaders/PbrDemoPS_compiled.h)
 
 #set_source_files_properties(${shader_source_vs} PROPERTIES VS_SHADER_FLAGS "/Fh \"${PROJECT_SOURCE_DIR}/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\" /Zi /Od /Qembed_debug" VS_SHADER_TYPE Vertex VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
 set_source_files_properties(${shader_source_vs} PROPERTIES VS_SHADER_FLAGS "/Fh \"${PROJECT_SOURCE_DIR}/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\" /Zi" VS_SHADER_TYPE Vertex VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)

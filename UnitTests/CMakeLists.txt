@@ -44,3 +44,21 @@ target_link_libraries(ImguiApp d3d12.lib dxgi.lib Shaders Dx12Core DirectXTex)
 target_include_directories(ImguiApp PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include ../ThirdParty/DirectXTex/DirectXTex ../ThridParty/Imgui)
 
 set_target_properties(ImguiApp PROPERTIES FOLDER "UnitTests")
+
+
+# set the project name and version
+add_executable(PbrDemo Src/PbrDemo.cpp)
+
+target_link_libraries(PbrDemo d3d12.lib dxgi.lib Shaders Dx12Core DirectXTex)
+target_include_directories(PbrDemo PUBLIC ../Dx12Core/Include ../ThirdParty/spdlog/include ../ThirdParty/imgui ../Shaders/Include ../ThirdParty/DirectXTex/DirectXTex ../ThridParty/Imgui)
+
+set_target_properties(PbrDemo PROPERTIES FOLDER "UnitTests")
+
+# Copy assets
+# add_custom_command(
+# TARGET PbrDemo POST_BUILD
+# COMMAND ${CMAKE_COMMAND} -E copy_directory
+#     ${CMAKE_SOURCE_DIR}/Assets
+
+#     $<TARGET_FILE_DIR:${PROJECTNAME}>/Assets
+# DEPENDS PbrDemo)
