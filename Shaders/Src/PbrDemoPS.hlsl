@@ -27,10 +27,10 @@ ConstantBuffer<Material> MaterialCB : register(b1);
 
 struct PSInput
 {
-    float3 Normal : NORMAL;
+    float3 NormalWS : NORMAL;
     float4 Colour : COLOUR;
     float2 TexCoord : TEXCOORD;
-    float3 WorldPosition : Position;
+    float3 PositionWS : Position;
 };
     
 // Constant normal incidence Fresnel factor for all dielectrics.
@@ -45,8 +45,8 @@ float4 main(PSInput input) : SV_Target
     float ao = MaterialCB.Ao;
     // -- End Material Collection ---
     
-    float3 N = normalize(input.Normal);
-    float3 V = normalize(DrawInfoCB.CameraPosition - input.WorldPosition);
+    float3 N = normalize(input.NormalWS);
+    float3 V = normalize(DrawInfoCB.CameraPosition - input.PositionWS);
         
     // Linear Interpolate the value against the abledo as matallic
     // surfaces reflect their colour.
@@ -71,8 +71,8 @@ float4 main(PSInput input) : SV_Target
     // Calculate Geometry Term
     float G = GeometrySmith(N, V, L, roughness);
     
-    // No calculate Cook-Torrance BRDF
-    float3 numerator = F * NDF * G;
+    // Now calculate Cook-Torrance BRDF
+    float3 numerator = NDF * G * F;
     
     // NOTE: we add 0.0001 to the denomiator to prevent a divide by zero in the case any dot product ends up zero
     float denominator = 4.0 * saturate(dot(N, V)) * saturate(dot(N, L)) + 0.0001;
@@ -84,6 +84,7 @@ float4 main(PSInput input) : SV_Target
     // we can now deduce what the diffuse contribution is as 1.0 = KSpecular + kDiffuse;
     float3 kSpecular = F;
     float3 KDiffuse = float3(1.0, 1.0, 1.0) - kSpecular;
+    KDiffuse *= 1.0f - metallic;
     
     float NdotL = saturate(dot(N, L));
     Lo += (KDiffuse * albedo / PI + specular) * radiance * NdotL;

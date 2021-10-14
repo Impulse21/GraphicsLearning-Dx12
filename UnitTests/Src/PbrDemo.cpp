@@ -85,7 +85,7 @@ private:
 	Material m_material;
 
 	XMFLOAT3 m_sunDirection = { 0.0f, -1.0f, 1.0f};
-
+	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
 	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };
 };
@@ -232,7 +232,7 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::NewLine();
 	ImGui::CollapsingHeader("Directional Light Parameters");
 	ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
-
+	ImGui::ColorEdit3("Colour", reinterpret_cast<float*>(&this->m_sunColour));
 	ImGui::End();
 }
 
@@ -265,7 +265,7 @@ void PbrDemo::Render()
 
 		drawInfo.WorldMatrix = this->m_meshTransform;
 		drawInfo.CameraPosition = this->m_cameraPosition;
-		drawInfo.SunColour = { 23.47f, 21.31f, 20.79f };
+		drawInfo.SunColour = this->m_sunColour;
 		drawInfo.SunDirection = this->m_sunDirection;
 
 		GraphicsState s = {};
