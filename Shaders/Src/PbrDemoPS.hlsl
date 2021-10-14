@@ -34,8 +34,7 @@ struct PSInput
 };
     
 // Constant normal incidence Fresnel factor for all dielectrics.
-static const float3 Fdielectric = 0.04;
-
+static const float Fdielectric = 0.04f;
 float4 main(PSInput input) : SV_Target
 {
     // -- Collect Material Data ---
@@ -50,7 +49,7 @@ float4 main(PSInput input) : SV_Target
         
     // Linear Interpolate the value against the abledo as matallic
     // surfaces reflect their colour.
-    float3 F0 = lerp(0.04, albedo, metallic);
+    float3 F0 = lerp(Fdielectric, albedo, metallic);
     
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
     
@@ -67,7 +66,7 @@ float4 main(PSInput input) : SV_Target
     
     // Calculate Geometry Term
     float G = GeometrySmith(N, V, L, roughness);
-
+    
     // Calculate Fersnel Term
     float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
     

@@ -84,10 +84,10 @@ private:
 
 	Material m_material;
 
-	XMFLOAT3 m_sunDirection = { 0.0f, 0.0f, 1.0f};
+	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, 2.0f};
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
-	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };
+	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -3 };
 };
 
 
@@ -161,7 +161,7 @@ void PbrDemo::LoadContent()
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
 
-	this->m_sphereMesh = MeshPrefabs::CreateSphere();
+	this->m_sphereMesh = MeshPrefabs::CreateSphere(1.0f, 16, true);
 
 	LOG_INFO("Interleaving vertex data");
 	std::vector<Vertex> vertices = this->InterleaveVertexData(this->m_sphereMesh);
@@ -224,6 +224,7 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::NewLine();
 	ImGui::CollapsingHeader("Material Parameters");
 
+	// ImGui::Checkbox("")
 	ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_material.Albedo));
 	ImGui::DragFloat("Roughness", &this->m_material.Roughness, 0.01f, 0.0f, 1.0f);
 	ImGui::DragFloat("Metallic", &this->m_material.Metallic, 0.01f, 0.0f, 1.0f);
