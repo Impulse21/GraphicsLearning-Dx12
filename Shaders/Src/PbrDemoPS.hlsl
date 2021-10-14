@@ -61,15 +61,15 @@ float4 main(PSInput input) : SV_Target
     
     // If point light, calculate attenuation here;
     float3 radiance = DrawInfoCB.SunColour; // * attenuation;
-
-    // Calculate Fersnel Term
-    float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
     
     // Calculate Normal Distribution Term
     float NDF = DistributionGGX(N, H, roughness);
     
     // Calculate Geometry Term
     float G = GeometrySmith(N, V, L, roughness);
+
+    // Calculate Fersnel Term
+    float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
     
     // Now calculate Cook-Torrance BRDF
     float3 numerator = NDF * G * F;
@@ -87,7 +87,7 @@ float4 main(PSInput input) : SV_Target
     KDiffuse *= 1.0f - metallic;
     
     float NdotL = saturate(dot(N, L));
-    Lo += (KDiffuse * albedo / PI + specular) * radiance * NdotL;
+    Lo += (KDiffuse * (albedo / PI) + specular) * radiance * NdotL;
     // -- End light iteration
     
     
