@@ -84,7 +84,7 @@ private:
 
 	Material m_material;
 
-	XMFLOAT3 m_sunDirection = { 0.0f, -1.0f, 1.0f};
+	XMFLOAT3 m_sunDirection = { 0.0f, 0.0f, 1.0f};
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
 	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };

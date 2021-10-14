@@ -56,7 +56,7 @@ float4 main(PSInput input) : SV_Target
     
     // -- Iterate over lights here
     // If this is a point light, calculate vector from light to World Pos
-    float3 L = normalize(-DrawInfoCB.SunDirection);
+    float3 L = normalize(DrawInfoCB.SunDirection);
     float3 H = normalize(V + L);
     
     // If point light, calculate attenuation here;
