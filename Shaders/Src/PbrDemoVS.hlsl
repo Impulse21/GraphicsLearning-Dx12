@@ -1,10 +1,12 @@
 
 struct DrawInfo
 {
-    matrix modelViewProjectMatrix;
+    matrix WorldMatrix;
+    matrix ModelViewProjectMatrix;
+    float3 CameraPosition;
 };
 
-ConstantBuffer<DrawInfo> DrawInfoCB : register(b1);
+ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
 
 struct VSInput
 {
@@ -19,6 +21,7 @@ struct VsOutput
     float3 Normal : NORMAL;
     float4 Colour : COLOUR;
     float2 TexCoord : TEXCOORD;
+    float3 WorldPosition : Position;
     float4 Position : SV_POSITION;
 };
 
@@ -26,7 +29,9 @@ VsOutput main(VSInput input)
 {
     VsOutput output;
  
-    output.Position = mul(DrawInfoCB.modelViewProjectMatrix, float4(input.Pos, 1.0f));
+    float4 modelPosition = float4(input.Pos, 1.0f);
+    output.WorldPosition = mul(DrawInfoCB.WorldMatrix, modelPosition);
+    output.Position = mul(DrawInfoCB.ModelViewProjectMatrix, modelPosition);
     output.Normal = input.Normal;
     output.TexCoord = input.TexCoord;
     output.Colour = float4(input.Colour, 1.0f);

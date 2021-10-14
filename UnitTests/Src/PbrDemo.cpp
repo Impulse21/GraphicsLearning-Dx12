@@ -2,8 +2,11 @@
 #include "Dx12Core/Dx12Core.h"
 #include "Dx12Core/Application.h"
 
-#include "Shaders/TexturedCubeVS_compiled.h"
-#include "Shaders/TexturedCubePS_compiled.h"
+#include "Shaders/PbrDemoVS_compiled.h"
+#include "Shaders/PbrDemoPS_compiled.h""
+
+#include <imgui.h>
+#include "Dx12Core/ImGui/ImGuiRenderer.h"
 
 #include <DirectXMath.h>
 
@@ -18,24 +21,36 @@ struct Vertex
 	XMFLOAT3 Normal;
 	XMFLOAT3 Colour;
 	XMFLOAT2 TexCoord;
+
 };
 
 struct DrawInfo
 {
+	XMMATRIX WorldMatrix;
 	XMMATRIX ModelViewProjectionMatrix;
+
+	XMFLOAT3 CameraPosition;
+
+	XMFLOAT3 SunDirection;
+	XMFLOAT3 SunColour;
 };
 
-struct MaterialInfo
+struct Material
 {
-	uint32_t albedoIndex;
+	XMFLOAT3 Albedo;
+	float Metallic;
+	float Roughness;
+	float Ao;
+
+	float __PADDING[2];
 };
 
 namespace RootParameters
 {
 	enum
 	{
-		PushConstant = 0,
-		DrawInfoCB,
+		DrawInfoCB = 0,
+		MaterialCB,
 		Count
 	};
 }
@@ -56,6 +71,7 @@ private:
 	std::vector<Vertex> InterleaveVertexData(MeshData const& meshData);
 
 private:
+	std::unique_ptr<ImGuiRenderer> m_imguiRenderer;
 	BufferHandle m_vertexbuffer;
 	BufferHandle m_indexBuffer;
 	MeshData m_sphereMesh;
@@ -66,6 +82,12 @@ private:
 	XMMATRIX m_viewMatrix = XMMatrixIdentity();
 	XMMATRIX m_porjMatrix = XMMatrixIdentity();
 
+	Material m_material;
+
+	XMFLOAT3 m_sunDirection = { 0.0f, -1.0f, 1.0f};
+
+	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
+	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };
 };
 
 
@@ -75,10 +97,9 @@ CREATE_APPLICATION(PbrDemo)
 void PbrDemo::LoadContent()
 {
 	{
-		const XMVECTOR eyePosition = XMVectorSet(0, 0, -10, 1);
 		const XMVECTOR focusPoint = XMVectorSet(0, 0, 0, 1);
 		const XMVECTOR upDirection = XMVectorSet(0, 1, 0, 0);
-		this->m_viewMatrix = XMMatrixLookAtLH(eyePosition, focusPoint, upDirection);
+		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPositionV, focusPoint, upDirection);
 
 		float aspectRatio = 
 			this->GetDevice()->GetCurrentSwapChainDesc().Width / static_cast<float>(this->GetDevice()->GetCurrentSwapChainDesc().Height);
@@ -103,10 +124,10 @@ void PbrDemo::LoadContent()
 	ShaderDesc d = {};
 	d.shaderType = ShaderType::Vertex;
 
-	ShaderHandle vs = this->GetDevice()->CreateShader(d, gTexturedCubeVS, sizeof(gTexturedCubeVS));
+	ShaderHandle vs = this->GetDevice()->CreateShader(d, gPbrDemoVS, sizeof(gPbrDemoVS));
 
 	d.shaderType = ShaderType::Pixel;
-	ShaderHandle ps = this->GetDevice()->CreateShader(d, gTexturedCubePS, sizeof(gTexturedCubePS));
+	ShaderHandle ps = this->GetDevice()->CreateShader(d, gPbrDemoPS, sizeof(gPbrDemoPS));
 
 	// TODO I AM HERE: Add Colour and push Constants
 	GraphicsPipelineDesc pipelineDesc = {};
@@ -125,8 +146,18 @@ void PbrDemo::LoadContent()
 	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
 
 
+	ShaderParameterLayout parameterLayout = {};
+	parameterLayout.AddCBVParameter<0, 0>();
+	parameterLayout.AddCBVParameter<1, 0>();
 
+	pipelineDesc.UseShaderParameters = true;
+	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
+	pipelineDesc.ShaderParameters.AllowInputLayout();
 	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
+
+	this->m_imguiRenderer = std::make_unique<ImGuiRenderer>();
+
+	this->m_imguiRenderer->Initialize(this->GetWindow(), this->GetDevice());
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
 
@@ -162,10 +193,19 @@ void PbrDemo::LoadContent()
 	}
 
 	this->GetDevice()->Submit(true);
+
+	this->m_material = {};
+	this->m_material.Albedo = XMFLOAT3{ 1.0f, 0.0f, 0.0f };
+	this->m_material.Ao = 0.3f;
+	this->m_material.Metallic = 0.4f;
+	this->m_material.Roughness = 1.0f;
 }
 
 void PbrDemo::Update(double elapsedTime)
 {
+	this->m_imguiRenderer->BeginFrame();
+
+
 	// Set Matrix data 
 	XMMATRIX translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 0.0f);
 
@@ -174,9 +214,26 @@ void PbrDemo::Update(double elapsedTime)
 	i += 10 * elapsedTime;
 
 	const XMVECTOR rotationAxis = XMVectorSet(0, 1, 1, 0);
-	XMMATRIX rotationMatrix = XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
+	XMMATRIX rotationMatrix = XMMatrixIdentity(); //  XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
 	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 	this->m_meshTransform = scaleMatrix * rotationMatrix * translationMatrix;
+
+
+	static bool showWindow = true;
+	ImGui::Begin("Options", &showWindow, ImGuiWindowFlags_AlwaysAutoResize);
+	ImGui::NewLine();
+	ImGui::CollapsingHeader("Material Parameters");
+
+	ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_material.Albedo));
+	ImGui::DragFloat("Roughness", &this->m_material.Roughness, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("Metallic", &this->m_material.Metallic, 0.01f, 0.0f, 1.0f);
+	ImGui::DragFloat("AO", &this->m_material.Ao, 0.01f, 0.0f, 1.0f);
+
+	ImGui::NewLine();
+	ImGui::CollapsingHeader("Directional Light Parameters");
+	ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
+
+	ImGui::End();
 }
 
 void PbrDemo::Render()
@@ -206,6 +263,10 @@ void PbrDemo::Render()
 			this->m_porjMatrix,
 			drawInfo);
 
+		drawInfo.WorldMatrix = this->m_meshTransform;
+		drawInfo.CameraPosition = this->m_cameraPosition;
+		drawInfo.SunColour = { 23.47f, 21.31f, 20.79f };
+		drawInfo.SunDirection = this->m_sunDirection;
 
 		GraphicsState s = {};
 		s.VertexBuffer = this->m_vertexbuffer;
@@ -220,12 +281,15 @@ void PbrDemo::Render()
 		s.DepthStencil = this->m_depthBuffer;
 
 		gfxContext.SetGraphicsState(s);
-
-		MaterialInfo matInfo = {};
-
-		gfxContext.BindGraphics32BitConstants(RootParameters::PushConstant, matInfo);
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
+		gfxContext.BindDynamicConstantBuffer<Material>(RootParameters::MaterialCB, this->m_material);
 		gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+	}
+
+	{
+		ScopedMarker m = gfxContext.BeginScropedMarker("Draw ImGui");
+
+		this->m_imguiRenderer->Draw(gfxContext, this->GetDevice());
 	}
 
 	{
