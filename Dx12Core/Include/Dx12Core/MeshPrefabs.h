@@ -13,7 +13,10 @@ namespace Dx12Core
 		std::vector<DirectX::XMFLOAT3> Normal;
 		std::vector<DirectX::XMFLOAT3> Colour;
 		std::vector<DirectX::XMFLOAT2> TexCoords;
+		std::vector<DirectX::XMFLOAT3> Tangents;
+		std::vector<DirectX::XMFLOAT3> BiNormals;
 	};
+
 	class MeshPrefabs
 	{
 	public:

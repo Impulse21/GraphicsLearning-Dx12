@@ -17,5 +17,6 @@ add_subdirectory(ThirdParty)
 add_subdirectory(Shaders)
 add_subdirectory(Dx12Core)
 add_subdirectory(UnitTests)
+add_subdirectory(GraphicTechniques)
 
 target_link_libraries(Dx12Core glfw DirectX-Headers DirectX-Guids Imgui)

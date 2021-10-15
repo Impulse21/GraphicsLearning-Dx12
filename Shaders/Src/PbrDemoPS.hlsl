@@ -1,6 +1,5 @@
 #include "BRDFFunctions.hlsli"
 
-
 // -- Const buffers ---
 
 struct DrawInfo
@@ -21,9 +20,17 @@ struct Material
     float Metallic;
     float Roughness;
     float Ao;
+
+    uint AlbedoTexIndex;
+    uint NormalTexIndex;
+    uint MetallicTexIndex;
+    uint RoughnessTexIndex;
 };
     
 ConstantBuffer<Material> MaterialCB : register(b1);
+
+Texture2D Texture2DTable[] : register(t0, Tex2DSpace);
+SamplerState DefaultSampler : register(s0);
 
 struct PSInput
 {
@@ -39,12 +46,34 @@ float4 main(PSInput input) : SV_Target
 {
     // -- Collect Material Data ---
     float3 albedo = MaterialCB.Albedo;
+    if (MaterialCB.AlbedoTexIndex != InvalidDescriptorIndex)
+    {
+        albedo = Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(DefaultSampler, input.TexCoord).xyz;
+    }
+    
     float metallic = MaterialCB.Metallic;
+    if (MaterialCB.MetallicTexIndex != InvalidDescriptorIndex)
+    {
+        metallic = Texture2DTable[MaterialCB.MetallicTexIndex].Sample(DefaultSampler, input.TexCoord).r;
+    }
+    
     float roughness = MaterialCB.Roughness;
+    if (MaterialCB.RoughnessTexIndex != InvalidDescriptorIndex)
+    {
+        roughness = Texture2DTable[MaterialCB.RoughnessTexIndex].Sample(DefaultSampler, input.TexCoord).r;
+    }
+    
     float ao = MaterialCB.Ao;
+    
+    float3 normal = input.NormalWS;
+    if (MaterialCB.NormalTexIndex != InvalidDescriptorIndex)
+    {
+        return Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(DefaultSampler, input.TexCoord);
+    }
     // -- End Material Collection ---
     
-    float3 N = normalize(input.NormalWS);
+    // -- Lighting Model ---
+    float3 N = normalize(normal);
     float3 V = normalize(DrawInfoCB.CameraPosition - input.PositionWS);
         
     // Linear Interpolate the value against the abledo as matallic

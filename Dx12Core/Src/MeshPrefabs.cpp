@@ -15,6 +15,40 @@ static void ReverseWinding(MeshData& meshData)
 	}
 }
 
+// http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-13-normal-mapping/#tangent-and-bitangent
+static void ComputeTangentSpace(MeshData& meshData) 
+{
+	assert(meshData.Indices.size() % 3);
+
+	for (int i = 0; i < meshData.Indices.size(); i += 3)
+	{
+		auto& index0 = meshData.Indices[i + 0];
+		auto& index1 = meshData.Indices[i + 1];
+		auto& index2 = meshData.Indices[i + 2];
+
+		// Vertices
+		XMFLOAT3 pos[3];
+		pos [0] = meshData.Positions[index0];
+		pos [1] = meshData.Positions[index1];
+		pos [2] = meshData.Positions[index2];
+
+		XMFLOAT3 normals[3];
+		normals[0] = meshData.Normal[index0];
+		normals[1] = meshData.Normal[index1];
+		normals[2] = meshData.Normal[index2];
+
+		// UVs
+		XMFLOAT2 uvs[3];
+		uvs[0] = meshData.TexCoords[index0];
+		uvs[1] = meshData.TexCoords[index1];
+		uvs[2] = meshData.TexCoords[index2];
+
+		XMFLOAT4 tangent[3];
+
+		// ComputeTangentFrame(idx, 1, pos, normals, t, 3, tangent);
+	}
+}
+
 MeshData Dx12Core::MeshPrefabs::CreateCube(float size, bool rhsCoord)
 {
 
