@@ -29,7 +29,9 @@ struct Material
     
 ConstantBuffer<Material> MaterialCB : register(b1);
 
-Texture2D Texture2DTable[] : register(t0, Tex2DSpace);
+Texture2D   Texture2DTable[]    : register(t0, Tex2DSpace);
+TextureCube TextureCubeTable[]  : register(t0, TexCubeSpace);
+
 SamplerState DefaultSampler : register(s0);
 
 struct PSInput

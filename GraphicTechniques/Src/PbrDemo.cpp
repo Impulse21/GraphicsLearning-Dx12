@@ -74,6 +74,7 @@ private:
 	std::vector<Vertex> InterleaveVertexData(MeshData const& meshData);
 
 private:
+	TextureHandle m_irradanceMap;
 	std::unique_ptr<ImGuiRenderer> m_imguiRenderer;
 	BufferHandle m_vertexbuffer;
 	BufferHandle m_indexBuffer;
@@ -152,7 +153,8 @@ void PbrDemo::LoadContent()
 
 	BindlessShaderParameterLayout bindlessParameterLayout = {};
 	bindlessParameterLayout.MaxCapacity = UINT_MAX;
-	bindlessParameterLayout.AddParameterSRV(100);
+	bindlessParameterLayout.AddParameterSRV(101);
+	bindlessParameterLayout.AddParameterSRV(102);
 
 	ShaderParameterLayout parameterLayout = {};
 	parameterLayout.AddCBVParameter<0, 0>();
@@ -226,6 +228,13 @@ void PbrDemo::LoadContent()
 			copyContext,
 			BindFlags::ShaderResource);
 
+	this->m_irradanceMap =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			copyContext,
+			BindFlags::ShaderResource);
+
+	// Load IrradanceMap
 	this->GetDevice()->Submit(true);
 
 	this->m_customMaterial = {};

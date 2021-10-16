@@ -143,8 +143,8 @@ void BindlessExampleApp::LoadContent()
 
 	BindlessShaderParameterLayout bindlessParameterLayout = {};
 	bindlessParameterLayout.MaxCapacity = UINT_MAX;
-	bindlessParameterLayout.AddParameterSRV(100);
 	bindlessParameterLayout.AddParameterSRV(101);
+	bindlessParameterLayout.AddParameterSRV(100);
 
 	pipelineDesc.VS = vs;
 	pipelineDesc.PS = ps;

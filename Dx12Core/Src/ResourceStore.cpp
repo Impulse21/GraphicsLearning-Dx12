@@ -94,8 +94,16 @@ TextureHandle Dx12Core::TextureResourceStore::Load(std::string path, ICommandCon
 		break;
 
 	case TEX_DIMENSION_TEXTURE2D:
-		desc.Dimension = TextureDimension::Texture2D;
 		desc.ArraySize = metadata.arraySize;
+		// TODO: Better handle this.
+		if (desc.ArraySize == 6)
+		{
+			desc.Dimension = TextureDimension::TextureCube;
+		}
+		else
+		{
+			desc.Dimension = TextureDimension::Texture2D;
+		}
 		break;
 
 	case TEX_DIMENSION_TEXTURE3D:

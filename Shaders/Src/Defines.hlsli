@@ -1,8 +1,10 @@
 #ifndef __DEFINES_HLSLI__
 #define __DEFINES_HLSLI__
 
-#define Tex2DSpace space100
-#define BufferSpace space101
+#define BufferSpace     space100
+#define Tex2DSpace      space101
+#define TexCubeSpace    space102
+
 #define InvalidDescriptorIndex ~0U
 
 

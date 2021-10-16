@@ -221,6 +221,7 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 			IID_PPV_ARGS(&internal->D3DResource)
 	));
 
+	auto& textureDesc = internal->GetDesc();
 	// Create Views
 	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
 	{
@@ -244,8 +245,18 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;  // Only 2D textures are supported (this was checked in the calling function).
-		srvDesc.Texture2D.MipLevels = internal->GetDesc().MipLevels;
+
+		if (textureDesc.Dimension == TextureDimension::TextureCube)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;  // Only 2D textures are supported (this was checked in the calling function).
+			srvDesc.TextureCube.MipLevels = textureDesc.MipLevels;
+			srvDesc.TextureCube.MostDetailedMip = 0;
+		}
+		else
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;  // Only 2D textures are supported (this was checked in the calling function).
+			srvDesc.Texture2D.MipLevels = internal->GetDesc().MipLevels;
+		}
 
 		this->m_context.Device2->CreateShaderResourceView(
 			internal->D3DResource,
