@@ -215,13 +215,16 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Tex2D(
 				desc.Format, desc.Width, desc.Height,
-				1, 0, 1, 0, resourceFlags),
+				desc.ArraySize,
+				desc.MipLevels,
+				1,
+				0,
+				resourceFlags),
 			desc.InitialState,
 			desc.OptmizedClearValue.has_value() ? &optimizedClearValue : nullptr,
 			IID_PPV_ARGS(&internal->D3DResource)
 	));
 
-	auto& textureDesc = internal->GetDesc();
 	// Create Views
 	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
 	{
@@ -246,10 +249,10 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-		if (textureDesc.Dimension == TextureDimension::TextureCube)
+		if (desc.Dimension == TextureDimension::TextureCube)
 		{
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;  // Only 2D textures are supported (this was checked in the calling function).
-			srvDesc.TextureCube.MipLevels = textureDesc.MipLevels;
+			srvDesc.TextureCube.MipLevels = desc.MipLevels;
 			srvDesc.TextureCube.MostDetailedMip = 0;
 		}
 		else

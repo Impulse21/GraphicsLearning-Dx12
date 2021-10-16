@@ -7,9 +7,6 @@ struct DrawInfo
     matrix WorldMatrix;
     matrix ModelViewProjectMatrix;
     float3 CameraPosition;
-    
-    float3 SunDirection;
-    float3 SunColour;
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
@@ -28,6 +25,19 @@ struct Material
 };
     
 ConstantBuffer<Material> MaterialCB : register(b1);
+
+struct Enviroment
+{
+    float3 SunDirection;
+    float _padding;
+    
+    float3 SunColour;
+    float _padding1;
+    
+    uint IrradianceMapTexIndex;
+};
+
+ConstantBuffer<Enviroment> EnviromentCB : register(b2);
 
 Texture2D   Texture2DTable[]    : register(t0, Tex2DSpace);
 TextureCube TextureCubeTable[]  : register(t0, TexCubeSpace);
@@ -83,48 +93,60 @@ float4 main(PSInput input) : SV_Target
     float3 F0 = lerp(Fdielectric, albedo, metallic);
     
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
+    {
+        // -- Iterate over lights here
+        // If this is a point light, calculate vector from light to World Pos
+        float3 L = normalize(EnviromentCB.SunDirection);
+        float3 H = normalize(V + L);
     
-    // -- Iterate over lights here
-    // If this is a point light, calculate vector from light to World Pos
-    float3 L = normalize(DrawInfoCB.SunDirection);
-    float3 H = normalize(V + L);
+        // If point light, calculate attenuation here;
+        float3 radiance = EnviromentCB.SunColour; // * attenuation;
     
-    // If point light, calculate attenuation here;
-    float3 radiance = DrawInfoCB.SunColour; // * attenuation;
+        // Calculate Normal Distribution Term
+        float NDF = DistributionGGX(N, H, roughness);
     
-    // Calculate Normal Distribution Term
-    float NDF = DistributionGGX(N, H, roughness);
+        // Calculate Geometry Term
+        float G = GeometrySmith(N, V, L, roughness);
     
-    // Calculate Geometry Term
-    float G = GeometrySmith(N, V, L, roughness);
+        // Calculate Fersnel Term
+        float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
     
-    // Calculate Fersnel Term
-    float3 F = FresnelSchlick(saturate(dot(H, V)), F0);
+        // Now calculate Cook-Torrance BRDF
+        float3 numerator = NDF * G * F;
     
-    // Now calculate Cook-Torrance BRDF
-    float3 numerator = NDF * G * F;
-    
-    // NOTE: we add 0.0001 to the denomiator to prevent a divide by zero in the case any dot product ends up zero
-    float denominator = 4.0 * saturate(dot(N, V)) * saturate(dot(N, L)) + 0.0001;
+        // NOTE: we add 0.0001 to the denomiator to prevent a divide by zero in the case any dot product ends up zero
+        float denominator = 4.0 * saturate(dot(N, V)) * saturate(dot(N, L)) + 0.0001;
 
-    float3 specular = numerator / denominator;
+        float3 specular = numerator / denominator;
     
-    // Now we can calculate the light's constribution to the reflectance equation. Since Fersnel Value directly corresponds to
-    // Ks, we ca use F to denote the specular contribution of any light that hits the surface.
-    // we can now deduce what the diffuse contribution is as 1.0 = KSpecular + kDiffuse;
-    float3 kSpecular = F;
-    float3 KDiffuse = float3(1.0, 1.0, 1.0) - kSpecular;
-    KDiffuse *= 1.0f - metallic;
+        // Now we can calculate the light's constribution to the reflectance equation. Since Fersnel Value directly corresponds to
+        // Ks, we ca use F to denote the specular contribution of any light that hits the surface.
+        // we can now deduce what the diffuse contribution is as 1.0 = KSpecular + kDiffuse;
+        float3 kSpecular = F;
+        float3 KDiffuse = float3(1.0, 1.0, 1.0) - kSpecular;
+        KDiffuse *= 1.0f - metallic;
     
-    float NdotL = saturate(dot(N, L));
-    Lo += (KDiffuse * (albedo / PI) + specular) * radiance * NdotL;
+        float NdotL = saturate(dot(N, L));
+        Lo += (KDiffuse * (albedo / PI) + specular) * radiance * NdotL;
+    }
     // -- End light iteration
     
     
     // Improvised abmient lighting
-    float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
+    float3 ambient = float(0.03).xxx * albedo * ao;
+    if (EnviromentCB.IrradianceMapTexIndex != InvalidDescriptorIndex)
+    {
+        float3 irradiance = TextureCubeTable[EnviromentCB.IrradianceMapTexIndex].Sample(DefaultSampler, N).rgb;
+        
+        float3 kSpecular = FresnelSchlick(saturate(dot(N, V)), F0, roughness);
+        float3 kDiffuse = 1.0 - kSpecular;
+        float3 diffuse = irradiance * albedo;
+        ambient = (kDiffuse * diffuse) * ao;
+    }
+    
     
     float3 colour = ambient + Lo;
+    
     // Correction for gamma?
     colour = colour / (colour + float3(1.0, 1.0, 1.0));
     colour = pow(colour, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));

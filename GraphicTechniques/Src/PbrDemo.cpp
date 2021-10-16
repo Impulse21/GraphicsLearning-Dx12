@@ -28,11 +28,7 @@ struct DrawInfo
 {
 	XMMATRIX WorldMatrix;
 	XMMATRIX ModelViewProjectionMatrix;
-
 	XMFLOAT3 CameraPosition;
-
-	XMFLOAT3 SunDirection;
-	XMFLOAT3 SunColour;
 };
 
 struct Material
@@ -48,12 +44,23 @@ struct Material
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
 };
 
+struct Enviroment
+{
+	XMFLOAT3 SunDirection;
+	float _paddding;
+
+	XMFLOAT3 SunColour;
+	float _padding1;
+
+	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+};
 namespace RootParameters
 {
 	enum
 	{
 		DrawInfoCB = 0,
 		MaterialCB,
+		EnvCB,
 		Count
 	};
 }
@@ -88,12 +95,15 @@ private:
 
 	Material m_customMaterial;
 	Material m_rustedIronMaterial;
-	bool m_showRustedIronMateiral = false;
 
 	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, 2.0f};
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
 	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -3 };
+
+	// Settings
+	bool m_showRustedIronMateiral = false;
+	bool m_enableIrradanceMap = true;
 };
 
 
@@ -159,6 +169,7 @@ void PbrDemo::LoadContent()
 	ShaderParameterLayout parameterLayout = {};
 	parameterLayout.AddCBVParameter<0, 0>();
 	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddCBVParameter<2, 0>();
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -273,6 +284,7 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::NewLine();
 	ImGui::CollapsingHeader("Material Parameters");
 
+	ImGui::Checkbox("Enable Irradance Map", &this->m_enableIrradanceMap);
 	ImGui::Checkbox("Show Rusted Iron Material", &this->m_showRustedIronMateiral);
 
 	if (!m_showRustedIronMateiral)
@@ -310,18 +322,6 @@ void PbrDemo::Render()
 
 		const SwapChainDesc& swapChainDesc = this->GetDevice()->GetCurrentSwapChainDesc();
 
-		DrawInfo drawInfo = {};
-		this->ComputeMatrices(
-			this->m_meshTransform,
-			this->m_viewMatrix,
-			this->m_porjMatrix,
-			drawInfo);
-
-		drawInfo.WorldMatrix = this->m_meshTransform;
-		drawInfo.CameraPosition = this->m_cameraPosition;
-		drawInfo.SunColour = this->m_sunColour;
-		drawInfo.SunDirection = this->m_sunDirection;
-
 		GraphicsState s = {};
 		s.VertexBuffer = this->m_vertexbuffer;
 		s.IndexBuffer = this->m_indexBuffer;
@@ -335,6 +335,17 @@ void PbrDemo::Render()
 		s.DepthStencil = this->m_depthBuffer;
 
 		gfxContext.SetGraphicsState(s);
+
+
+		DrawInfo drawInfo = {};
+		this->ComputeMatrices(
+			this->m_meshTransform,
+			this->m_viewMatrix,
+			this->m_porjMatrix,
+			drawInfo);
+
+		drawInfo.WorldMatrix = this->m_meshTransform;
+		drawInfo.CameraPosition = this->m_cameraPosition;
 		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
 
 		if (this->m_showRustedIronMateiral)
@@ -346,6 +357,16 @@ void PbrDemo::Render()
 			gfxContext.BindDynamicConstantBuffer<Material>(RootParameters::MaterialCB, this->m_customMaterial);
 		}
 		
+		Enviroment env = {};
+		env.SunColour = this->m_sunColour;
+		env.SunDirection = this->m_sunDirection;
+
+		env.IrradnaceMapTexIndex = this->m_enableIrradanceMap
+			? this->GetDevice()->GetDescritporIndex(this->m_irradanceMap)
+			: INVALID_DESCRIPTOR_INDEX;
+
+		gfxContext.BindDynamicConstantBuffer<Enviroment>(RootParameters::EnvCB, env);
+
 		gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
 	}
 

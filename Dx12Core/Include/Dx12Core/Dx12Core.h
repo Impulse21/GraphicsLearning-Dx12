@@ -150,7 +150,7 @@ namespace Dx12Core
         uint32_t Height = 0;
         union
         {
-            uint16_t ArraySize;
+            uint16_t ArraySize = 1;
             uint16_t Depth;
         };
 

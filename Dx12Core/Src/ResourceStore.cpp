@@ -86,6 +86,8 @@ TextureHandle Dx12Core::TextureResourceStore::Load(std::string path, ICommandCon
 	desc.InitialState = D3D12_RESOURCE_STATE_COPY_DEST;
 	desc.MipLevels = metadata.mipLevels;
 
+	desc.DebugName = filePath.filename().u8string();
+
 	switch (metadata.dimension)
 	{
 	case TEX_DIMENSION_TEXTURE1D:
