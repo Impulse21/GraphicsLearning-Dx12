@@ -29,12 +29,11 @@ ConstantBuffer<Material> MaterialCB : register(b1);
 struct Enviroment
 {
     float3 SunDirection;
-    float _padding;
-    
+    uint __PADDING;
     float3 SunColour;
-    float _padding1;
-    
     uint IrradianceMapTexIndex;
+    uint PreFilteredEnvMapTexIndex;
+    uint BrdfLUTTexIndex;
 };
 
 ConstantBuffer<Enviroment> EnviromentCB : register(b2);
@@ -42,7 +41,8 @@ ConstantBuffer<Enviroment> EnviromentCB : register(b2);
 Texture2D   Texture2DTable[]    : register(t0, Tex2DSpace);
 TextureCube TextureCubeTable[]  : register(t0, TexCubeSpace);
 
-SamplerState DefaultSampler : register(s0);
+SamplerState SamplerDefault : register(s0);
+SamplerState SamplerBrdf : register(s1);
 
 struct PSInput
 {
@@ -54,25 +54,26 @@ struct PSInput
     
 // Constant normal incidence Fresnel factor for all dielectrics.
 static const float Fdielectric = 0.04f;
+static const float MaxReflectionLod = 7.0f;
 float4 main(PSInput input) : SV_Target
 {
     // -- Collect Material Data ---
     float3 albedo = MaterialCB.Albedo;
     if (MaterialCB.AlbedoTexIndex != InvalidDescriptorIndex)
     {
-        albedo = Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(DefaultSampler, input.TexCoord).xyz;
+        albedo = Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).xyz;
     }
     
     float metallic = MaterialCB.Metallic;
     if (MaterialCB.MetallicTexIndex != InvalidDescriptorIndex)
     {
-        metallic = Texture2DTable[MaterialCB.MetallicTexIndex].Sample(DefaultSampler, input.TexCoord).r;
+        metallic = Texture2DTable[MaterialCB.MetallicTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
     float roughness = MaterialCB.Roughness;
     if (MaterialCB.RoughnessTexIndex != InvalidDescriptorIndex)
     {
-        roughness = Texture2DTable[MaterialCB.RoughnessTexIndex].Sample(DefaultSampler, input.TexCoord).r;
+        roughness = Texture2DTable[MaterialCB.RoughnessTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
     float ao = MaterialCB.Ao;
@@ -80,18 +81,20 @@ float4 main(PSInput input) : SV_Target
     float3 normal = input.NormalWS;
     if (MaterialCB.NormalTexIndex != InvalidDescriptorIndex)
     {
-        return Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(DefaultSampler, input.TexCoord);
+        return Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord);
     }
     // -- End Material Collection ---
     
     // -- Lighting Model ---
     float3 N = normalize(normal);
     float3 V = normalize(DrawInfoCB.CameraPosition - input.PositionWS);
-        
+    float3 R = reflect(-V, N);
+    
     // Linear Interpolate the value against the abledo as matallic
     // surfaces reflect their colour.
     float3 F0 = lerp(Fdielectric, albedo, metallic);
     
+    // Reflectance equation
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
     {
         // -- Iterate over lights here
@@ -132,18 +135,35 @@ float4 main(PSInput input) : SV_Target
     // -- End light iteration
     
     
-    // Improvised abmient lighting
+    // Improvised abmient lighting by using the Env Irradance map.
     float3 ambient = float(0.03).xxx * albedo * ao;
-    if (EnviromentCB.IrradianceMapTexIndex != InvalidDescriptorIndex)
+    if (EnviromentCB.IrradianceMapTexIndex != InvalidDescriptorIndex &&
+        EnviromentCB.PreFilteredEnvMapTexIndex != InvalidDescriptorIndex &&
+        EnviromentCB.BrdfLUTTexIndex != InvalidDescriptorIndex)
     {
-        float3 irradiance = TextureCubeTable[EnviromentCB.IrradianceMapTexIndex].Sample(DefaultSampler, N).rgb;
         
-        float3 kSpecular = FresnelSchlick(saturate(dot(N, V)), F0, roughness);
+        float3 F = FresnelSchlick(saturate(dot(N, V)), F0, roughness);
+        // Improvised abmient lighting by using the Env Irradance map.
+        float3 irradiance = TextureCubeTable[EnviromentCB.IrradianceMapTexIndex].Sample(SamplerDefault, N).rgb;
+        
+        float3 kSpecular = F;
         float3 kDiffuse = 1.0 - kSpecular;
         float3 diffuse = irradiance * albedo;
-        ambient = (kDiffuse * diffuse) * ao;
+        
+        // Sample both the BRDFLut and Pre-filtered map and combine them together as per the
+        // split-sum approximation to get the IBL Specular part.
+        float lodLevel = roughness * MaxReflectionLod;
+        float3 prefilteredColour =
+            TextureCubeTable[EnviromentCB.PreFilteredEnvMapTexIndex].SampleLevel(SamplerDefault, R, lodLevel).rgb;
+        
+        float2 brdfTexCoord = float2(saturate(dot(N, V)), roughness);
+        
+        float2 brdf = Texture2DTable[EnviromentCB.BrdfLUTTexIndex].Sample(SamplerBrdf, brdfTexCoord).rg;
+        
+        float3 specular = prefilteredColour * (F * brdf.x + brdf.y);   
+        
+        ambient = (kDiffuse * diffuse + specular) * ao;
     }
-    
     
     float3 colour = ambient + Lo;
     

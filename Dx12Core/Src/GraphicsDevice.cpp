@@ -225,6 +225,9 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 			IID_PPV_ARGS(&internal->D3DResource)
 	));
 
+	std::wstring debugName(desc.DebugName.begin(), desc.DebugName.end());
+	internal->D3DResource->SetName(debugName.c_str());
+
 	// Create Views
 	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
 	{
@@ -468,7 +471,7 @@ RootSignatureHandle Dx12Core::GraphicsDevice::CreateRootSignature(
 		std::memcpy(parameters.data(), shaderParameter->Parameters.data(), sizeof(CD3DX12_ROOT_PARAMETER1) * parameters.size());
 
 		staticSamplers.resize(shaderParameter->StaticSamplers.size());
-		std::memcpy(staticSamplers.data(), shaderParameter->StaticSamplers.data(), sizeof(CD3DX12_ROOT_PARAMETER1) * staticSamplers.size());
+		std::memcpy(staticSamplers.data(), shaderParameter->StaticSamplers.data(), sizeof(CD3DX12_STATIC_SAMPLER_DESC) * staticSamplers.size());
 	}
 
 	uint32_t bindlessRootParameterOffset = 0;

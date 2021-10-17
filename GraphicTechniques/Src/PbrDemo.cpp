@@ -47,12 +47,11 @@ struct Material
 struct Enviroment
 {
 	XMFLOAT3 SunDirection;
-	float _paddding;
-
+	uint32_t _padding; // TODO: WHy is this needed. There is a padding of 16 bytes being added here for no apperent reason. See PIX
 	XMFLOAT3 SunColour;
-	float _padding1;
-
 	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t PreFilteredEnvMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
 };
 namespace RootParameters
 {
@@ -82,6 +81,9 @@ private:
 
 private:
 	TextureHandle m_irradanceMap;
+	TextureHandle m_prefilteredMap;
+	TextureHandle m_brdfLUT;
+
 	std::unique_ptr<ImGuiRenderer> m_imguiRenderer;
 	BufferHandle m_vertexbuffer;
 	BufferHandle m_indexBuffer;
@@ -103,7 +105,7 @@ private:
 
 	// Settings
 	bool m_showRustedIronMateiral = false;
-	bool m_enableIrradanceMap = true;
+	bool m_enableIBL = true;
 };
 
 
@@ -174,6 +176,10 @@ void PbrDemo::LoadContent()
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
 		1.0f);
+	parameterLayout.AddStaticSampler<1, 0>(
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP
+		);
 
 	pipelineDesc.UseShaderParameters = true;
 	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
@@ -245,6 +251,18 @@ void PbrDemo::LoadContent()
 			copyContext,
 			BindFlags::ShaderResource);
 
+	this->m_prefilteredMap =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
+			copyContext,
+			BindFlags::ShaderResource);
+
+	this->m_brdfLUT =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\PaperMill_Ruins_E\\BrdfLut.dds",
+			copyContext,
+			BindFlags::ShaderResource);
+
 	// Load IrradanceMap
 	this->GetDevice()->Submit(true);
 
@@ -284,7 +302,7 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::NewLine();
 	ImGui::CollapsingHeader("Material Parameters");
 
-	ImGui::Checkbox("Enable Irradance Map", &this->m_enableIrradanceMap);
+	ImGui::Checkbox("Enable IBL", &this->m_enableIBL);
 	ImGui::Checkbox("Show Rusted Iron Material", &this->m_showRustedIronMateiral);
 
 	if (!m_showRustedIronMateiral)
@@ -361,9 +379,12 @@ void PbrDemo::Render()
 		env.SunColour = this->m_sunColour;
 		env.SunDirection = this->m_sunDirection;
 
-		env.IrradnaceMapTexIndex = this->m_enableIrradanceMap
-			? this->GetDevice()->GetDescritporIndex(this->m_irradanceMap)
-			: INVALID_DESCRIPTOR_INDEX;
+		if (this->m_enableIBL)
+		{
+			env.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_irradanceMap);
+			env.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_prefilteredMap);
+			env.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
+		}
 
 		gfxContext.BindDynamicConstantBuffer<Enviroment>(RootParameters::EnvCB, env);
 
