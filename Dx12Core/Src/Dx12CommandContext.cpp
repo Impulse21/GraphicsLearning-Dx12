@@ -427,6 +427,15 @@ void Dx12Core::Dx12CommandContext::BindDynamicIndexBuffer(size_t numIndicies, DX
 	this->m_internalList->IASetIndexBuffer(&indexBufferView);
 }
 
+void Dx12Core::Dx12CommandContext::BindDynamicStructuredBuffer(uint32_t rootParameterIndex, size_t numElements, size_t elementSize, const void* bufferData)
+{
+	size_t sizeInBytes = numElements * elementSize;
+	UploadBuffer::Allocation alloc = this->m_uploadBuffer->Allocate(sizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+	std::memcpy(alloc.Cpu, bufferData, sizeInBytes);
+
+	this->m_internalList->SetGraphicsRootShaderResourceView(rootParameterIndex, alloc.Gpu);
+}
+
 void Dx12Core::Dx12CommandContext::BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer)
 {
 	Buffer* internal = SafeCast<Buffer*>(buffer);

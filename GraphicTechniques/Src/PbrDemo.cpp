@@ -26,9 +26,30 @@ struct Vertex
 
 struct DrawInfo
 {
-	XMMATRIX WorldMatrix;
-	XMMATRIX ModelViewProjectionMatrix;
+	uint32_t InstanceIndex;
+
+	XMFLOAT3 Albedo;
+	float Metallic;
+	float Roughness;
+	float Ao;
+
+	uint32_t AlbedoTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t NormalTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t MetallicTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
+};
+
+struct SceneInfo
+{
+	XMFLOAT4X4 ViewProjectionMatrix;
 	XMFLOAT3 CameraPosition;
+	uint32_t _padding; // I DO NOT understand why this is happening 
+	XMFLOAT3 SunDirection;
+	uint32_t _padding2;
+	XMFLOAT3 SunColour;
+	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t PreFilteredEnvMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
 };
 
 struct Material
@@ -44,25 +65,35 @@ struct Material
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
 };
 
-struct Enviroment
+struct InstanceInfo
 {
-	XMFLOAT3 SunDirection;
-	uint32_t _padding; // TODO: WHy is this needed. There is a padding of 16 bytes being added here for no apperent reason. See PIX
-	XMFLOAT3 SunColour;
-	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t PreFilteredEnvMapTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
+	XMMATRIX WorldMatrix;
 };
+
 namespace RootParameters
 {
 	enum
 	{
 		DrawInfoCB = 0,
-		MaterialCB,
-		EnvCB,
+		SceneInfoCB,
+		InstanceInfoSB,
 		Count
 	};
 }
+
+namespace SceneType
+{
+	enum
+	{
+		Sphere,
+		SphereGrid,
+		TexturedMaterials,
+		Count,
+	};
+
+	static const char* Names[] = { "Sphere", "Sphere Grid", "Textured Materials" };
+}
+
 
 class PbrDemo : public ApplicationDx12Base
 {
@@ -75,11 +106,18 @@ protected:
 	void Render() override;
 
 private:
-	void XM_CALLCONV ComputeMatrices(FXMMATRIX model, CXMMATRIX view, CXMMATRIX projection, DrawInfo& drawInfo);
+	void XM_CALLCONV ComputeMatrices(CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& modelViewProjection);
 
 	std::vector<Vertex> InterleaveVertexData(MeshData const& meshData);
 
 private:
+	const size_t SphereGridMaxRows = 6;
+	const size_t SphereGridMaxColumns = 6;
+	const float SphereGridSpaceing = 1.2;
+
+	// Reserver first entry for the non grid mesh.
+	const int SphereGridInstanceDataOffset = 1;
+
 	TextureHandle m_irradanceMap;
 	TextureHandle m_prefilteredMap;
 	TextureHandle m_brdfLUT;
@@ -87,25 +125,31 @@ private:
 	std::unique_ptr<ImGuiRenderer> m_imguiRenderer;
 	BufferHandle m_vertexbuffer;
 	BufferHandle m_indexBuffer;
+
 	MeshData m_sphereMesh;
+	BufferHandle m_instanceBuffer;
 
 	GraphicsPipelineHandle m_pipelineState;
 	TextureHandle m_depthBuffer;
-	XMMATRIX m_meshTransform = XMMatrixIdentity();
+
 	XMMATRIX m_viewMatrix = XMMatrixIdentity();
 	XMMATRIX m_porjMatrix = XMMatrixIdentity();
 
 	Material m_customMaterial;
 	Material m_rustedIronMaterial;
 
-	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, 2.0f};
+	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, -1.0f};
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
-	const XMVECTOR m_cameraPositionV = XMVectorSet(0, 0, -3, 1);
-	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -3 };
+	const XMVECTOR m_cameraPositionV = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
+	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };
 
 	// Settings
 	bool m_showRustedIronMateiral = false;
 	bool m_enableIBL = true;
+
+	int m_sceneType = SceneType::SphereGrid;
+
+
 };
 
 
@@ -169,9 +213,9 @@ void PbrDemo::LoadContent()
 	bindlessParameterLayout.AddParameterSRV(102);
 
 	ShaderParameterLayout parameterLayout = {};
-	parameterLayout.AddCBVParameter<0, 0>();
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfo) / 4);
 	parameterLayout.AddCBVParameter<1, 0>();
-	parameterLayout.AddCBVParameter<2, 0>();
+	parameterLayout.AddSRVParameter<0, 0>();
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -223,6 +267,44 @@ void PbrDemo::LoadContent()
 		copyContext.WriteBuffer<uint16_t>(this->m_indexBuffer, this->m_sphereMesh.Indices);
 		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
+
+	// Construct instance data
+	std::vector<InstanceInfo> instanceData((SphereGridMaxRows* SphereGridMaxColumns) + SphereGridInstanceDataOffset);
+
+	// Reserve
+	const XMMATRIX rotationMatrix = XMMatrixIdentity();
+	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
+
+	instanceData[0].WorldMatrix = scaleMatrix * rotationMatrix * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
+	instanceData[0].WorldMatrix = XMMatrixTranspose(instanceData[0].WorldMatrix);
+	size_t index = SphereGridInstanceDataOffset;
+	for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
+	{
+		for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
+		{
+
+			XMMATRIX translationMatrix =
+				XMMatrixTranslation(
+					static_cast<float>(iCol - static_cast<int32_t>((SphereGridMaxColumns / 2))) * SphereGridSpaceing,
+					(static_cast<float>(iRow - static_cast<int32_t>((SphereGridMaxRows / 2))) * SphereGridSpaceing) + 0.5f,
+					0.0f);
+
+			instanceData[index].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
+			instanceData[index].WorldMatrix = XMMatrixTranspose(instanceData[index].WorldMatrix);
+			index++;
+		}
+	}
+
+	BufferDesc bufferDesc = {};
+	bufferDesc.BindFlags = BindFlags::ShaderResource;
+	bufferDesc.SizeInBytes = sizeof(InstanceInfo) * instanceData.size();
+	bufferDesc.StrideInBytes = sizeof(InstanceInfo);
+	bufferDesc.DebugName = L"Instance Buffer";
+
+	this->m_instanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
+
+	copyContext.WriteBuffer<InstanceInfo>(this->m_instanceBuffer, instanceData);
+	copyContext.TransitionBarrier(this->m_instanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	auto albedo =
 		this->GetTextureStore()->Load(
@@ -283,40 +365,42 @@ void PbrDemo::Update(double elapsedTime)
 {
 	this->m_imguiRenderer->BeginFrame();
 
-
-	// Set Matrix data 
-	XMMATRIX translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 0.0f);
-
-	static float i = 0.0f;
-	float angle = i;
-	i += 10 * elapsedTime;
-
-	const XMVECTOR rotationAxis = XMVectorSet(0, 1, 1, 0);
-	XMMATRIX rotationMatrix = XMMatrixIdentity(); //  XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
-	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
-	this->m_meshTransform = scaleMatrix * rotationMatrix * translationMatrix;
-
-
 	static bool showWindow = true;
 	ImGui::Begin("Options", &showWindow, ImGuiWindowFlags_AlwaysAutoResize);
+	ImGui::Combo("Scene Type", &this->m_sceneType, SceneType::Names, IM_ARRAYSIZE(SceneType::Names));
 	ImGui::NewLine();
-	ImGui::CollapsingHeader("Material Parameters");
 
-	ImGui::Checkbox("Enable IBL", &this->m_enableIBL);
-	ImGui::Checkbox("Show Rusted Iron Material", &this->m_showRustedIronMateiral);
-
-	if (!m_showRustedIronMateiral)
+	if (ImGui::CollapsingHeader("Material Info"))
 	{
-		ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_customMaterial.Albedo));
-		ImGui::DragFloat("Roughness", &this->m_customMaterial.Roughness, 0.01f, 0.0f, 1.0f);
-		ImGui::DragFloat("Metallic", &this->m_customMaterial.Metallic, 0.01f, 0.0f, 1.0f);
-		ImGui::DragFloat("AO", &this->m_customMaterial.Ao, 0.01f, 0.0f, 1.0f);
+		ImGui::Checkbox("Enable IBL", &this->m_enableIBL);
+
+		switch (this->m_sceneType)
+		{
+		case SceneType::TexturedMaterials:
+			break;
+		case SceneType::SphereGrid:
+			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_customMaterial.Albedo));
+			ImGui::DragFloat("AO", &this->m_customMaterial.Ao, 0.01f, 0.0f, 1.0f);
+			ImGui::TextWrapped("Roughtness increases by Coloumn Left(0.0f) ---> Right(1.0f)");
+			ImGui::TextWrapped("Mettalic increates by row Top(0.0f) ---> Bottom(1.0f)");
+			break;
+		case SceneType::Sphere:
+		default:
+			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_customMaterial.Albedo));
+			ImGui::DragFloat("Roughness", &this->m_customMaterial.Roughness, 0.01f, 0.0f, 1.0f);
+			ImGui::DragFloat("Metallic", &this->m_customMaterial.Metallic, 0.01f, 0.0f, 1.0f);
+			ImGui::DragFloat("AO", &this->m_customMaterial.Ao, 0.01f, 0.0f, 1.0f);
+		}
 	}
 
 	ImGui::NewLine();
-	ImGui::CollapsingHeader("Directional Light Parameters");
-	ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
-	ImGui::ColorEdit3("Colour", reinterpret_cast<float*>(&this->m_sunColour));
+	
+	if (ImGui::CollapsingHeader("Directional Light Parameters"))
+	{
+		ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
+		ImGui::ColorEdit3("Colour", reinterpret_cast<float*>(&this->m_sunColour));
+	}
+
 	ImGui::End();
 }
 
@@ -355,42 +439,65 @@ void PbrDemo::Render()
 		gfxContext.SetGraphicsState(s);
 
 
-		DrawInfo drawInfo = {};
+		SceneInfo sceneInfo = {};
 		this->ComputeMatrices(
-			this->m_meshTransform,
 			this->m_viewMatrix,
 			this->m_porjMatrix,
-			drawInfo);
+			sceneInfo.ViewProjectionMatrix);
 
-		drawInfo.WorldMatrix = this->m_meshTransform;
-		drawInfo.CameraPosition = this->m_cameraPosition;
-		gfxContext.BindDynamicConstantBuffer<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-
-		if (this->m_showRustedIronMateiral)
-		{
-			gfxContext.BindDynamicConstantBuffer<Material>(RootParameters::MaterialCB, this->m_rustedIronMaterial);
-		}
-		else
-		{
-			gfxContext.BindDynamicConstantBuffer<Material>(RootParameters::MaterialCB, this->m_customMaterial);
-		}
-		
-		Enviroment env = {};
-		env.SunColour = this->m_sunColour;
-		env.SunDirection = this->m_sunDirection;
+		sceneInfo.CameraPosition = this->m_cameraPosition;
+		sceneInfo.SunColour = this->m_sunColour;
+		sceneInfo.SunDirection = this->m_sunDirection;
 
 		if (this->m_enableIBL)
 		{
-			env.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_irradanceMap);
-			env.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_prefilteredMap);
-			env.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
+			sceneInfo.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_irradanceMap);
+			sceneInfo.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_prefilteredMap);
+			sceneInfo.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
 		}
 
-		gfxContext.BindDynamicConstantBuffer<Enviroment>(RootParameters::EnvCB, env);
+		gfxContext.BindDynamicConstantBuffer<SceneInfo>(RootParameters::SceneInfoCB, sceneInfo);
+		gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_instanceBuffer);
 
-		gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+		DrawInfo drawInfo = {};
+
+		if (this->m_sceneType == SceneType::SphereGrid)
+		{
+			drawInfo.Albedo = this->m_customMaterial.Albedo;
+			drawInfo.Ao = this->m_customMaterial.Ao;
+			drawInfo.InstanceIndex = SphereGridInstanceDataOffset;
+			for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
+			{
+				drawInfo.Metallic = static_cast<float>(iRow) / static_cast<float>(SphereGridMaxRows);
+				for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
+				{
+					drawInfo.Roughness = std::clamp(static_cast<float>(iCol) / static_cast<float>(SphereGridMaxColumns), 0.05f, 1.0f);
+					gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
+					gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+
+					drawInfo.InstanceIndex++;
+				}
+			}
+		}
+		else
+		{
+			drawInfo.InstanceIndex = 0;
+			
+			drawInfo.Albedo = this->m_customMaterial.Albedo;
+			drawInfo.AlbedoTexIndex = this->m_customMaterial.AlbedoTexIndex;
+			drawInfo.Roughness = this->m_customMaterial.Roughness;
+			drawInfo.RoughnessTexIndex = this->m_customMaterial.RoughnessTexIndex;
+			drawInfo.Metallic = this->m_customMaterial.Metallic;
+			drawInfo.MetallicTexIndex = this->m_customMaterial.MetallicTexIndex;
+			drawInfo.Ao = this->m_customMaterial.Ao;
+			drawInfo.NormalTexIndex = this->m_customMaterial.NormalTexIndex;
+
+			// based on scene draw a specific way
+			gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
+
+			gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+		}
 	}
-
 	{
 		ScopedMarker m = gfxContext.BeginScropedMarker("Draw ImGui");
 
@@ -405,9 +512,10 @@ void PbrDemo::Render()
 	this->GetDevice()->Submit();
 }
 
-void XM_CALLCONV PbrDemo::ComputeMatrices(FXMMATRIX model, CXMMATRIX view, CXMMATRIX projection, DrawInfo& drawInfo)
+void XM_CALLCONV PbrDemo::ComputeMatrices(CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& viewProjection)
 {
-	drawInfo.ModelViewProjectionMatrix = model * view * projection;
+	XMMATRIX m = view * projection;
+	XMStoreFloat4x4(&viewProjection, XMMatrixTranspose(m));
 }
 
 std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)

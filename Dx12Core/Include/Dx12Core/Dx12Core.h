@@ -770,7 +770,18 @@ namespace Dx12Core
             static_assert(sizeof(T) == 2 || sizeof(T) == 4);
 
             DXGI_FORMAT indexFormat = (sizeof(T) == 2) ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
-            SetDynamicIndexBuffer(indexBufferData.size(), indexFormat, indexBufferData.data());
+            this->SetDynamicIndexBuffer(indexBufferData.size(), indexFormat, indexBufferData.data());
+        }
+
+        /**
+         * Set dynamic structured buffer contents.
+         */
+        virtual void BindDynamicStructuredBuffer(uint32_t rootParameterIndex, size_t numElements, size_t elementSize, const void* bufferData) = 0;
+
+        template<typename T>
+        void BindDynamicStructuredBuffer(uint32_t rootParameterIndex, const std::vector<T>& bufferData)
+        {
+            this->BindDynamicStructuredBuffer(rootParameterIndex, bufferData.size(), sizeof(T), bufferData.data());
         }
 
         virtual void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) = 0;

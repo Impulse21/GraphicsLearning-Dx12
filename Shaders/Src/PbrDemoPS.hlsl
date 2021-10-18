@@ -4,15 +4,8 @@
 
 struct DrawInfo
 {
-    matrix WorldMatrix;
-    matrix ModelViewProjectMatrix;
-    float3 CameraPosition;
-};
-
-ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
-
-struct Material
-{
+    uint InstanceIndex;
+    
     float3 Albedo;
     float Metallic;
     float Roughness;
@@ -23,20 +16,21 @@ struct Material
     uint MetallicTexIndex;
     uint RoughnessTexIndex;
 };
-    
-ConstantBuffer<Material> MaterialCB : register(b1);
 
-struct Enviroment
+ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
+
+struct SceneInfo
 {
+    matrix ViewProjection;
+    float3 CameraPosition;
     float3 SunDirection;
-    uint __PADDING;
     float3 SunColour;
     uint IrradianceMapTexIndex;
     uint PreFilteredEnvMapTexIndex;
     uint BrdfLUTTexIndex;
 };
 
-ConstantBuffer<Enviroment> EnviromentCB : register(b2);
+ConstantBuffer<SceneInfo> SceneInfoCB : register(b1);
 
 Texture2D   Texture2DTable[]    : register(t0, Tex2DSpace);
 TextureCube TextureCubeTable[]  : register(t0, TexCubeSpace);
@@ -58,36 +52,36 @@ static const float MaxReflectionLod = 7.0f;
 float4 main(PSInput input) : SV_Target
 {
     // -- Collect Material Data ---
-    float3 albedo = MaterialCB.Albedo;
-    if (MaterialCB.AlbedoTexIndex != InvalidDescriptorIndex)
+    float3 albedo = DrawInfoCB.Albedo;
+    if (DrawInfoCB.AlbedoTexIndex != InvalidDescriptorIndex)
     {
-        albedo = Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).xyz;
+        albedo = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).xyz;
     }
     
-    float metallic = MaterialCB.Metallic;
-    if (MaterialCB.MetallicTexIndex != InvalidDescriptorIndex)
+    float metallic = DrawInfoCB.Metallic;
+    if (DrawInfoCB.MetallicTexIndex != InvalidDescriptorIndex)
     {
-        metallic = Texture2DTable[MaterialCB.MetallicTexIndex].Sample(SamplerDefault, input.TexCoord).r;
+        metallic = Texture2DTable[DrawInfoCB.MetallicTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
-    float roughness = MaterialCB.Roughness;
-    if (MaterialCB.RoughnessTexIndex != InvalidDescriptorIndex)
+    float roughness = DrawInfoCB.Roughness;
+    if (DrawInfoCB.RoughnessTexIndex != InvalidDescriptorIndex)
     {
-        roughness = Texture2DTable[MaterialCB.RoughnessTexIndex].Sample(SamplerDefault, input.TexCoord).r;
+        roughness = Texture2DTable[DrawInfoCB.RoughnessTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
-    float ao = MaterialCB.Ao;
+    float ao = DrawInfoCB.Ao;
     
     float3 normal = input.NormalWS;
-    if (MaterialCB.NormalTexIndex != InvalidDescriptorIndex)
+    if (DrawInfoCB.NormalTexIndex != InvalidDescriptorIndex)
     {
-        return Texture2DTable[MaterialCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord);
+        return Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord);
     }
     // -- End Material Collection ---
     
     // -- Lighting Model ---
     float3 N = normalize(normal);
-    float3 V = normalize(DrawInfoCB.CameraPosition - input.PositionWS);
+    float3 V = normalize(SceneInfoCB.CameraPosition - input.PositionWS);
     float3 R = reflect(-V, N);
     
     // Linear Interpolate the value against the abledo as matallic
@@ -99,11 +93,11 @@ float4 main(PSInput input) : SV_Target
     {
         // -- Iterate over lights here
         // If this is a point light, calculate vector from light to World Pos
-        float3 L = normalize(EnviromentCB.SunDirection);
+        float3 L = normalize(SceneInfoCB.SunDirection);
         float3 H = normalize(V + L);
     
         // If point light, calculate attenuation here;
-        float3 radiance = EnviromentCB.SunColour; // * attenuation;
+        float3 radiance = SceneInfoCB.SunColour; // * attenuation;
     
         // Calculate Normal Distribution Term
         float NDF = DistributionGGX(N, H, roughness);
@@ -137,14 +131,14 @@ float4 main(PSInput input) : SV_Target
     
     // Improvised abmient lighting by using the Env Irradance map.
     float3 ambient = float(0.03).xxx * albedo * ao;
-    if (EnviromentCB.IrradianceMapTexIndex != InvalidDescriptorIndex &&
-        EnviromentCB.PreFilteredEnvMapTexIndex != InvalidDescriptorIndex &&
-        EnviromentCB.BrdfLUTTexIndex != InvalidDescriptorIndex)
+    if (SceneInfoCB.IrradianceMapTexIndex != InvalidDescriptorIndex &&
+        SceneInfoCB.PreFilteredEnvMapTexIndex != InvalidDescriptorIndex &&
+        SceneInfoCB.BrdfLUTTexIndex != InvalidDescriptorIndex)
     {
         
         float3 F = FresnelSchlick(saturate(dot(N, V)), F0, roughness);
         // Improvised abmient lighting by using the Env Irradance map.
-        float3 irradiance = TextureCubeTable[EnviromentCB.IrradianceMapTexIndex].Sample(SamplerDefault, N).rgb;
+        float3 irradiance = TextureCubeTable[SceneInfoCB.IrradianceMapTexIndex].Sample(SamplerDefault, N).rgb;
         
         float3 kSpecular = F;
         float3 kDiffuse = 1.0 - kSpecular;
@@ -154,17 +148,17 @@ float4 main(PSInput input) : SV_Target
         // split-sum approximation to get the IBL Specular part.
         float lodLevel = roughness * MaxReflectionLod;
         float3 prefilteredColour =
-            TextureCubeTable[EnviromentCB.PreFilteredEnvMapTexIndex].SampleLevel(SamplerDefault, R, lodLevel).rgb;
+            TextureCubeTable[SceneInfoCB.PreFilteredEnvMapTexIndex].SampleLevel(SamplerDefault, R, lodLevel).rgb;
         
         float2 brdfTexCoord = float2(saturate(dot(N, V)), roughness);
         
-        float2 brdf = Texture2DTable[EnviromentCB.BrdfLUTTexIndex].Sample(SamplerBrdf, brdfTexCoord).rg;
+        float2 brdf = Texture2DTable[SceneInfoCB.BrdfLUTTexIndex].Sample(SamplerBrdf, brdfTexCoord).rg;
         
         float3 specular = prefilteredColour * (F * brdf.x + brdf.y);   
         
         ambient = (kDiffuse * diffuse + specular) * ao;
     }
-    
+        
     float3 colour = ambient + Lo;
     
     // Correction for gamma?

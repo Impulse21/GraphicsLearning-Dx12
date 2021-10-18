@@ -73,7 +73,7 @@ namespace Dx12Core
 		void BindDynamicConstantBuffer(size_t rootParameterIndex, size_t sizeInBytes, const void* bufferData) override;
 		void BindDynamicVertexBuffer(uint32_t slot, size_t numVertices, size_t vertexSize, const void* vertexBufferData);
 		void BindDynamicIndexBuffer(size_t numIndicies, DXGI_FORMAT indexFormat, const void* indexBufferData);
-
+		void BindDynamicStructuredBuffer(uint32_t rootParameterIndex, size_t numElements, size_t elementSize, const void* bufferData);
 		void BindStructuredBuffer(size_t rootParameterIndex, IBuffer* buffer) override;
 		void BindBindlessDescriptorTables(size_t rootParamterIndex) override;
 

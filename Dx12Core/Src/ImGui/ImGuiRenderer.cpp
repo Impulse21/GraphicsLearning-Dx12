@@ -12,7 +12,7 @@
 using namespace ImGui;
 using namespace DirectX;
 
-struct DrawInfo
+struct ImguiDrawInfo
 {
 	XMMATRIX Mvp;
 	uint32_t TextureIndex;
@@ -100,7 +100,7 @@ void Dx12Core::ImGuiRenderer::Draw(ICommandContext& commandContext, IGraphicsDev
 
 
     // Set root arguments.
-    DrawInfo drawInfo = {};
+	ImguiDrawInfo drawInfo = {};
 
     //    DirectX::XMMATRIX projectionMatrix = DirectX::XMMatrixOrthographicRH( drawData->DisplaySize.x, drawData->DisplaySize.y, 0.0f, 1.0f );
     float L = drawData->DisplayPos.x;
@@ -123,8 +123,6 @@ void Dx12Core::ImGuiRenderer::Draw(ICommandContext& commandContext, IGraphicsDev
 	s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
 	s.RenderTargets.push_back(device->GetCurrentBackBuffer());
 	commandContext.SetGraphicsState(s);
-
-    // drawInfo.Mvp = glm::transpose(drawInfo.Mvp);
 
     // Invalid Texture index
     drawInfo.TextureIndex = device->GetDescritporIndex(this->m_fontTexture);
@@ -204,7 +202,7 @@ void Dx12Core::ImGuiRenderer::CreatePso(IGraphicsDevice* device)
 
 
 	ShaderParameterLayout parameterLayout = {};
-	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfo) / 4);
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(ImguiDrawInfo) / 4);
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
