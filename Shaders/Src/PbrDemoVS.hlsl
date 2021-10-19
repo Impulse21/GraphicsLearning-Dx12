@@ -77,6 +77,5 @@ VsOutput main(VSInput input)
     
     // Calculate TBN Matrix
     output.TBN = float3x3(normalize(TangentWS), normalize(BiTangentWS), normalize(output.NormalWS));
-    output.TBN = transpose(output.TBN);
     return output;
 }

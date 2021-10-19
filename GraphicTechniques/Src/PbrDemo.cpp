@@ -26,6 +26,13 @@ struct Vertex
 
 };
 
+enum DrawFlags
+{
+	Draw_Albedo = 0x01,
+	Draw_Normal = 0x02,
+	Draw_Roughness = 0x04,
+};
+
 struct DrawInfo
 {
 	uint32_t InstanceIndex;
@@ -40,6 +47,8 @@ struct DrawInfo
 	uint32_t MetallicTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
+
+	uint32_t DrawFlags;
 };
 
 struct InstanceInfo
@@ -406,7 +415,7 @@ void PbrDemo::Update(double elapsedTime)
 
 			if (selectedMaterial.RoughnessTexIndex== INVALID_DESCRIPTOR_INDEX)
 			{
-				ImGui::DragFloat("Roughness", &selectedMaterial.Roughness, 0.01f, 0.0f, 1.0f);
+				ImGui::DragFloat("Roughness", &selectedMaterial.Roughness, 0.01f, 0.1f, 1.0f);
 			}
 
 			if (selectedMaterial.MetallicTexIndex == INVALID_DESCRIPTOR_INDEX)
@@ -774,19 +783,19 @@ void PbrDemo::LoadEnvData(
 {
 	outEnviroment.SkyBox =
 		this->GetTextureStore()->Load(
-			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
+			basePath + skyboxPath,
 			context,
 			BindFlags::ShaderResource);
 
 	outEnviroment.IrradanceMap =
 		this->GetTextureStore()->Load(
-			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			basePath + irradanceMapPath,
 			context,
 			BindFlags::ShaderResource);
 
 	outEnviroment.PrefilteredMap =
 		this->GetTextureStore()->Load(
-			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			basePath + prefilteredRadanceMapPath,
 			context,
 			BindFlags::ShaderResource);
 }
