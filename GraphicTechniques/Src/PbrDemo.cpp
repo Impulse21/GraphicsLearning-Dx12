@@ -81,10 +81,10 @@ struct EnvInfo
 
 struct Material
 {
-	XMFLOAT3 Albedo;
-	float Metallic;
-	float Roughness;
-	float Ao;
+	XMFLOAT3 Albedo = {0.0f ,0.0f, 0.0f};
+	float Metallic = 0.4f;
+	float Roughness = 0.1f;
+	float Ao = 0.3f;
 
 	uint32_t AlbedoTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t NormalTexIndex = INVALID_DESCRIPTOR_INDEX;
@@ -173,9 +173,6 @@ private:
 	const size_t SphereGridMaxColumns = 6;
 	const float SphereGridSpaceing = 1.2;
 
-	// Reserver first entry for the non grid mesh.
-	const int SphereGridInstanceDataOffset = 1;
-
 	TextureHandle m_irradanceMap;
 	TextureHandle m_prefilteredMap;
 	TextureHandle m_brdfLUT;
@@ -185,7 +182,9 @@ private:
 	BufferHandle m_indexBuffer;
 
 	MeshData m_sphereMesh;
-	BufferHandle m_instanceBuffer;
+	BufferHandle m_gridInstanceBuffer;
+	BufferHandle m_centerMeshInstanceBuffer;
+	BufferHandle m_texturedMeshInstanceBuffer;
 
 	GraphicsPipelineHandle m_pipelineState;
 	TextureHandle m_depthBuffer;
@@ -202,6 +201,7 @@ private:
 	const XMVECTOR m_focusPoint = XMVectorSet(0, 0, 0, 1);
 	const XMVECTOR m_upDirection = XMVectorSet(0, 1, 0, 0);
 	const XMVECTOR m_cameraClose = XMVectorSet(0.0f, 0.0f, -3.0f, 1.0f);
+	const XMVECTOR m_cameraMed = XMVectorSet(0.0f, 0.0f, -6.0f, 1.0f);
 	const XMVECTOR m_cameraFar = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
 	XMVECTOR m_cameraPosition = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
 
@@ -305,45 +305,88 @@ void PbrDemo::LoadContent()
 	}
 
 	// Construct instance data
-	std::vector<InstanceInfo> instanceData((SphereGridMaxRows* SphereGridMaxColumns) + SphereGridInstanceDataOffset);
-
-	// Reserve
+	std::vector<InstanceInfo> gridInstanceBufferData((SphereGridMaxRows* SphereGridMaxColumns));
 	const XMMATRIX rotationMatrix = XMMatrixIdentity();
 	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
-
-	instanceData[0].WorldMatrix = scaleMatrix * rotationMatrix * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
-	instanceData[0].WorldMatrix = XMMatrixTranspose(instanceData[0].WorldMatrix);
-	size_t index = SphereGridInstanceDataOffset;
-	for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
 	{
-		for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
+		size_t index = 0;
+		for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
+		{
+			for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
+			{
+
+				XMMATRIX translationMatrix =
+					XMMatrixTranslation(
+						static_cast<float>(iCol - static_cast<int32_t>((SphereGridMaxColumns / 2))) * SphereGridSpaceing,
+						(static_cast<float>(iRow - static_cast<int32_t>((SphereGridMaxRows / 2))) * SphereGridSpaceing) + 0.5f,
+						0.0f);
+
+				gridInstanceBufferData[index].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
+				gridInstanceBufferData[index].WorldMatrix = XMMatrixTranspose(gridInstanceBufferData[index].WorldMatrix);
+				index++;
+			}
+		}
+
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::ShaderResource;
+		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * gridInstanceBufferData.size();
+		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
+		bufferDesc.DebugName = L"Grid Instance Buffer";
+
+		this->m_gridInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
+
+		copyContext.WriteBuffer<InstanceInfo>(this->m_gridInstanceBuffer, gridInstanceBufferData);
+		copyContext.TransitionBarrier(this->m_gridInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	// Construct instance data
+	std::vector<InstanceInfo> centreInstanceBuffer(1);
+	{
+		centreInstanceBuffer[0].WorldMatrix = scaleMatrix * rotationMatrix * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
+		centreInstanceBuffer[0].WorldMatrix = XMMatrixTranspose(centreInstanceBuffer[0].WorldMatrix);
+
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::ShaderResource;
+		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * centreInstanceBuffer.size();
+		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
+		bufferDesc.DebugName = L"Centre Instance Buffer";
+
+		this->m_centerMeshInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
+
+		copyContext.WriteBuffer<InstanceInfo>(this->m_centerMeshInstanceBuffer, centreInstanceBuffer);
+		copyContext.TransitionBarrier(this->m_centerMeshInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	this->LoadMaterials(copyContext);
+
+	// Construct instance data
+	std::vector<InstanceInfo> texturedSphereInstanceBufferData(this->m_material.size());
+	{
+		for (int i = 0; i < texturedSphereInstanceBufferData.size(); i++)
 		{
 
 			XMMATRIX translationMatrix =
 				XMMatrixTranslation(
-					static_cast<float>(iCol - static_cast<int32_t>((SphereGridMaxColumns / 2))) * SphereGridSpaceing,
-					(static_cast<float>(iRow - static_cast<int32_t>((SphereGridMaxRows / 2))) * SphereGridSpaceing) + 0.5f,
+					static_cast<float>(i - static_cast<int32_t>((texturedSphereInstanceBufferData.size() / 2))) * SphereGridSpaceing,
+					0.0f,
 					0.0f);
 
-			instanceData[index].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
-			instanceData[index].WorldMatrix = XMMatrixTranspose(instanceData[index].WorldMatrix);
-			index++;
+			texturedSphereInstanceBufferData[i].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
+			texturedSphereInstanceBufferData[i].WorldMatrix = XMMatrixTranspose(texturedSphereInstanceBufferData[i].WorldMatrix);
 		}
+
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::ShaderResource;
+		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * texturedSphereInstanceBufferData.size();
+		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
+		bufferDesc.DebugName = L"Textured Material Instance Buffer";
+
+		this->m_texturedMeshInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
+
+		copyContext.WriteBuffer<InstanceInfo>(this->m_texturedMeshInstanceBuffer, texturedSphereInstanceBufferData);
+		copyContext.TransitionBarrier(this->m_texturedMeshInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
-	BufferDesc bufferDesc = {};
-	bufferDesc.BindFlags = BindFlags::ShaderResource;
-	bufferDesc.SizeInBytes = sizeof(InstanceInfo) * instanceData.size();
-	bufferDesc.StrideInBytes = sizeof(InstanceInfo);
-	bufferDesc.DebugName = L"Instance Buffer";
-
-	this->m_instanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
-
-	copyContext.WriteBuffer<InstanceInfo>(this->m_instanceBuffer, instanceData);
-	copyContext.TransitionBarrier(this->m_instanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-
-	this->LoadMaterials(copyContext);
 	this->LoadEnviroments(copyContext);
 
 	this->m_brdfLUT =
@@ -365,9 +408,19 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::Combo("Scene Type", &this->m_sceneType, SceneType::Names, IM_ARRAYSIZE(SceneType::Names));
 	ImGui::NewLine();
 
-	this->m_cameraPosition = this->m_sceneType == SceneType::SphereGrid
-		? this->m_cameraFar
-		: this->m_cameraClose;
+	if (this->m_sceneType == SceneType::SphereGrid)
+	{
+		this->m_cameraPosition = this->m_cameraFar;
+	}
+	else if (this->m_sceneType == SceneType::TexturedMaterials)
+	{
+		this->m_cameraPosition = this->m_cameraMed;
+	}
+	else
+	{
+		this->m_cameraPosition = this->m_cameraClose;
+	}
+
 	this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
 
 	if (ImGui::CollapsingHeader("Enviroment Settings"))
@@ -402,6 +455,7 @@ void PbrDemo::Update(double elapsedTime)
 			break;
 
 		case SceneType::TexturedMaterials:
+			break;
 		case SceneType::Sphere:
 		{
 
@@ -511,7 +565,6 @@ void PbrDemo::Render()
 		}
 
 		gfxContext.BindDynamicConstantBuffer<SceneInfo>(RootParameters::SceneInfoCB, sceneInfo);
-		gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_instanceBuffer);
 
 		DrawInfo drawInfo = {};
 
@@ -530,7 +583,8 @@ void PbrDemo::Render()
 
 		if (this->m_sceneType == SceneType::SphereGrid)
 		{
-			drawInfo.InstanceIndex = SphereGridInstanceDataOffset;
+			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_gridInstanceBuffer);
+			drawInfo.InstanceIndex = 0;
 			for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
 			{
 				drawInfo.Metallic = static_cast<float>(iRow) / static_cast<float>(SphereGridMaxRows);
@@ -544,8 +598,31 @@ void PbrDemo::Render()
 				}
 			}
 		}
+		else if (this->m_sceneType == SceneType::TexturedMaterials)
+		{
+			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_texturedMeshInstanceBuffer);
+			for (int i = 0; i < this->m_material.size(); i++)
+			{
+				drawInfo.InstanceIndex = i;
+
+				Material& selectedMaterial = this->m_material[i];
+				drawInfo.Albedo = selectedMaterial.Albedo;
+				drawInfo.AlbedoTexIndex = selectedMaterial.AlbedoTexIndex;
+				drawInfo.Roughness = selectedMaterial.Roughness;
+				drawInfo.RoughnessTexIndex = selectedMaterial.RoughnessTexIndex;
+				drawInfo.Metallic = selectedMaterial.Metallic;
+				drawInfo.MetallicTexIndex = selectedMaterial.MetallicTexIndex;
+				drawInfo.Ao = selectedMaterial.Ao;
+				drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
+				drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
+
+				gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
+				gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+			}
+		}
 		else
 		{
+			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_centerMeshInstanceBuffer);
 			drawInfo.InstanceIndex = 0;
 			gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
 			gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
@@ -670,14 +747,44 @@ void PbrDemo::LoadMaterials(ICommandContext& context)
 		this->LoadMaterial(
 			context,
 			BaseDir,
-			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_albedo.png",
-			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_normal-dx.png",
-			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_roughness.png",
-			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_metallic.png",
-			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_ao.png",
+			"scuffed-plastic\\scuffed-plastic4-alb.png",
+			"scuffed-plastic\\scuffed-plastic-normal.png",
+			"scuffed-plastic\\scuffed-plastic-rough.png",
+			"scuffed-plastic\\scuffed-plastic-metal.png",
+			"scuffed-plastic\\scuffed-plastic-ao.png",
 			material);
 
-		this->m_materialSettings.MaterialNames.emplace_back("polyester fabric1");
+		this->m_materialSettings.MaterialNames.emplace_back("scuffed plastic");
+	}
+
+	/*
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"Grass\\grass1-albedo3.png",
+			"Grass\\grass1-normal1-dx.png",
+			"Grass\\grass1-rough.png",
+			"Grass\\worn-shiny-metal-Metallic.png",
+			"Grass\\grass1-ao.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("grass");
+	}
+	*/
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"gold\\lightgold_albedo.png",
+			"gold\\lightgold_normal-dx.png",
+			"gold\\lightgold_roughness.png",
+			"gold\\lightgold_metallic.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("gold");
 	}
 }
 
