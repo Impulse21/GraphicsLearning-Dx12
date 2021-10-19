@@ -28,7 +28,7 @@ struct Vertex
 enum DrawFlags
 {
 	DrawAlbedoOnly = 0x01,
-	DrawNormalOnly = 0x02,
+	DrawNormalWSOnly = 0x02,
 	DrawRoughnessOnly = 0x04,
 	DrawMetallicOnly = 0x08,
 	DrawAoOnly = 0x10,
@@ -505,7 +505,7 @@ void PbrDemo::Update(double elapsedTime)
 		ImGui::CheckboxFlags("Roughness Only", &this->m_drawFlags, DrawFlags::DrawRoughnessOnly);
 		ImGui::CheckboxFlags("Metallic Only", &this->m_drawFlags, DrawFlags::DrawMetallicOnly);
 		ImGui::CheckboxFlags("Ao Only", &this->m_drawFlags, DrawFlags::DrawAoOnly);
-		ImGui::CheckboxFlags("Normal Only", &this->m_drawFlags, DrawFlags::DrawNormalOnly);
+		ImGui::CheckboxFlags("Normal Only", &this->m_drawFlags, DrawFlags::DrawNormalWSOnly);
 		ImGui::CheckboxFlags("Tangent Only", &this->m_drawFlags, DrawFlags::DrawTangentOnly);
 		ImGui::CheckboxFlags("BiTangent Only", &this->m_drawFlags, DrawFlags::DrawBiTangentOnly);
 	}
@@ -717,14 +717,14 @@ void PbrDemo::LoadMaterials(ICommandContext& context)
 		this->LoadMaterial(
 			context,
 			BaseDir,
-			"redbricks2b\\redbricks2b-albedo.png",
-			"redbricks2b\\redbricks2b-normal.png",
-			"redbricks2b\\redbricks2b-rough.png",
-			"redbricks2b\\redbricks2b-metalness.png",
-			"redbricks2b\\redbricks2b-ao.png",
+			"modern-brick1\\modern-brick1_albedo.png",
+			"modern-brick1\\modern-brick1_normal-dx.png",
+			"modern-brick1\\modern-brick1_roughness.png",
+			"modern-brick1\\modern-brick1_metallic.png",
+			"modern-brick1\\modern-brick1_ao.png",
 			material);
 
-		this->m_materialSettings.MaterialNames.emplace_back("red bricks");
+		this->m_materialSettings.MaterialNames.emplace_back("modern bricks");
 	}
 
 	{
