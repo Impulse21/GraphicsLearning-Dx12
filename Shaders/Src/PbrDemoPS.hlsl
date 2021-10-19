@@ -2,6 +2,15 @@
 
 // -- Const buffers ---
 
+#define DRAW_FLAG_ALBEDO        0x01
+#define DRAW_FLAG_NORMAL        0x02
+#define DRAW_FLAG_ROUGHNESS     0x04
+#define DRAW_FLAG_METALLIC      0x08
+#define DRAW_FLAG_AO            0x10
+#define DRAW_FLAG_TANGENT       0x20
+#define DRAW_FLAG_BITANGENT     0x40
+
+
 struct DrawInfo
 {
     uint InstanceIndex;
@@ -16,6 +25,7 @@ struct DrawInfo
     uint MetallicTexIndex;
     uint RoughnessTexIndex;
     uint AoTexIndex;
+    uint DrawFlags;
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
@@ -45,7 +55,7 @@ struct PSInput
     float4 Colour : COLOUR;
     float2 TexCoord : TEXCOORD;
     float3 PositionWS : Position;
-    float3x3 TBN : TBN;
+    float3 TangentWS : TANGENT;
 };
     
 // Constant normal incidence Fresnel factor for all dielectrics.
@@ -60,10 +70,20 @@ float4 main(PSInput input) : SV_Target
         albedo = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).xyz;
     }
     
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_ALBEDO)
+    {
+        return float4(albedo, 1.0f);
+    }
+    
     float metallic = DrawInfoCB.Metallic;
     if (DrawInfoCB.MetallicTexIndex != InvalidDescriptorIndex)
     {
         metallic = Texture2DTable[DrawInfoCB.MetallicTexIndex].Sample(SamplerDefault, input.TexCoord).r;
+    }
+    
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_METALLIC)
+    {
+        return float4(metallic, metallic, metallic, 1.0f);
     }
     
     float roughness = DrawInfoCB.Roughness;
@@ -72,19 +92,46 @@ float4 main(PSInput input) : SV_Target
         roughness = Texture2DTable[DrawInfoCB.RoughnessTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_ROUGHNESS)
+    {
+        return float4(roughness, roughness, roughness, 1.0f);
+    }
+    
     float ao = DrawInfoCB.Ao;
     if (DrawInfoCB.AoTexIndex != InvalidDescriptorIndex)
     {
         ao = Texture2DTable[DrawInfoCB.AoTexIndex].Sample(SamplerDefault, input.TexCoord).r;
     }
     
-    float3 normal = input.NormalWS;
-    if (DrawInfoCB.NormalTexIndex != InvalidDescriptorIndex)
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_AO)
     {
-        normal = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).rgb * 2.0 - 1.0;;
-        normal = normalize(mul(normal, input.TBN));
+        return float4(ao, ao, ao, 1.0f);
     }
     
+    float3 tangent = normalize(input.TangentWS.xyz);
+    float3 normal = normalize(input.NormalWS);
+    float3 biTangent = cross(normal, tangent);
+    if (DrawInfoCB.NormalTexIndex != InvalidDescriptorIndex)
+    {
+        float3x3 tbn = float3x3(tangent, biTangent, normal);
+        normal = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).rgb * 2.0 - 1.0;;
+        normal = normalize(mul(normal, tbn));
+    }
+    
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_NORMAL)
+    {
+        return float4(normal,1.0f);
+    }
+    
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_TANGENT)
+    {
+        return float4(tangent, 1.0f);
+    }
+    
+    if (DrawInfoCB.DrawFlags & DRAW_FLAG_BITANGENT)
+    {
+        return float4(biTangent, 1.0f);
+    }
     // -- End Material Collection ---
     
     // -- Lighting Model ---

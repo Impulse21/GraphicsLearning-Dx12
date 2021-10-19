@@ -22,15 +22,18 @@ struct Vertex
 	XMFLOAT3 Colour;
 	XMFLOAT2 TexCoord;
 	XMFLOAT4 Tangent;
-	XMFLOAT4 BiTangent;
 
 };
 
 enum DrawFlags
 {
-	Draw_Albedo = 0x01,
-	Draw_Normal = 0x02,
-	Draw_Roughness = 0x04,
+	DrawAlbedoOnly = 0x01,
+	DrawNormalOnly = 0x02,
+	DrawRoughnessOnly = 0x04,
+	DrawMetallicOnly = 0x08,
+	DrawAoOnly = 0x10,
+	DrawTangentOnly = 0x20,
+	DrawBiTangentOnly = 0x40,
 };
 
 struct DrawInfo
@@ -48,7 +51,7 @@ struct DrawInfo
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
 
-	uint32_t DrawFlags;
+	uint32_t DrawFlags = 0;
 };
 
 struct InstanceInfo
@@ -229,6 +232,8 @@ private:
 
 		int RenderMode = SkyboxRenderMode::Enviroment;
 	} m_enviromentSettings;
+
+	uint32_t m_drawFlags = 0;
 };
 
 
@@ -439,6 +444,17 @@ void PbrDemo::Update(double elapsedTime)
 		ImGui::ColorEdit3("Colour", reinterpret_cast<float*>(&this->m_sunColour));
 	}
 
+	ImGui::NewLine();
+	if (ImGui::CollapsingHeader("Draw Flags"))
+	{
+		ImGui::CheckboxFlags("Alebdo Only", &this->m_drawFlags, DrawFlags::DrawAlbedoOnly);
+		ImGui::CheckboxFlags("Roughness Only", &this->m_drawFlags, DrawFlags::DrawRoughnessOnly);
+		ImGui::CheckboxFlags("Metallic Only", &this->m_drawFlags, DrawFlags::DrawMetallicOnly);
+		ImGui::CheckboxFlags("Ao Only", &this->m_drawFlags, DrawFlags::DrawAoOnly);
+		ImGui::CheckboxFlags("Normal Only", &this->m_drawFlags, DrawFlags::DrawNormalOnly);
+		ImGui::CheckboxFlags("Tangent Only", &this->m_drawFlags, DrawFlags::DrawTangentOnly);
+		ImGui::CheckboxFlags("BiTangent Only", &this->m_drawFlags, DrawFlags::DrawBiTangentOnly);
+	}
 	ImGui::End();
 }
 
@@ -510,6 +526,8 @@ void PbrDemo::Render()
 		drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
 		drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
 		
+		drawInfo.DrawFlags = this->m_drawFlags;
+
 		if (this->m_sceneType == SceneType::SphereGrid)
 		{
 			drawInfo.InstanceIndex = SphereGridInstanceDataOffset;
@@ -569,7 +587,6 @@ std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)
 		interleavedData[i].Normal = meshData.Normal[i];
 		interleavedData[i].Colour = meshData.Colour[i];
 		interleavedData[i].Tangent = meshData.Tangents[i];
-		interleavedData[i].BiTangent= meshData.BiTangents[i];
 	}
 
 	return interleavedData;
@@ -819,7 +836,6 @@ void PbrDemo::CreateRenderPass()
 		{ "COLOUR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "BITANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
 	pipelineDesc.VS = vs;
