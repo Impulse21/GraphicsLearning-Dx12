@@ -21,6 +21,8 @@ struct Vertex
 	XMFLOAT3 Normal;
 	XMFLOAT3 Colour;
 	XMFLOAT2 TexCoord;
+	XMFLOAT4 Tangent;
+	XMFLOAT4 BiTangent;
 
 };
 
@@ -37,6 +39,12 @@ struct DrawInfo
 	uint32_t NormalTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t MetallicTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
+};
+
+struct InstanceInfo
+{
+	XMMATRIX WorldMatrix;
 };
 
 struct SceneInfo
@@ -52,6 +60,13 @@ struct SceneInfo
 	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
 };
 
+struct EnvInfo
+{
+	TextureHandle SkyBox;
+	TextureHandle IrradanceMap;
+	TextureHandle PrefilteredMap;
+};
+
 struct Material
 {
 	XMFLOAT3 Albedo;
@@ -63,11 +78,7 @@ struct Material
 	uint32_t NormalTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t MetallicTexIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
-};
-
-struct InstanceInfo
-{
-	XMMATRIX WorldMatrix;
+	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
 };
 
 namespace RootParameters
@@ -95,6 +106,9 @@ namespace SceneType
 }
 
 
+
+static const char* RenderModelNames[] = { "Disabled", "Enviroment", "Irradiance", "PF Radiance" };
+
 class PbrDemo : public ApplicationDx12Base
 {
 public:
@@ -109,6 +123,38 @@ private:
 	void XM_CALLCONV ComputeMatrices(CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& modelViewProjection);
 
 	std::vector<Vertex> InterleaveVertexData(MeshData const& meshData);
+
+	void LoadMaterials(ICommandContext& context);
+	void LoadMaterial(
+		ICommandContext& context,
+		std::string const& basePath,
+		std::string const& albedoPath,
+		std::string const& bumpMapPath,
+		std::string const& roughnessPath,
+		std::string const& metallicPath,
+		Material& outMaterial);
+
+	void LoadMaterial(
+		ICommandContext& context,
+		std::string const& basePath,
+		std::string const& albedoPath,
+		std::string const& bumpMapPath,
+		std::string const& roughnessPath,
+		std::string const& metallicPath,
+		std::string const& aoPath,
+		Material& outMaterial);
+
+	void LoadEnviroments(ICommandContext& context);
+	void LoadEnvData(
+		ICommandContext& context,
+		std::string const& basePath,
+		std::string const& skyboxPath,
+		std::string const& irradanceMapPath,
+		std::string const& prefilteredRadanceMapPath,
+		EnvInfo& outEnviroment);
+
+	void CreateRenderPass();
+	void CreateRenderPassSkybox();
 
 private:
 	const size_t SphereGridMaxRows = 6;
@@ -135,21 +181,45 @@ private:
 	XMMATRIX m_viewMatrix = XMMatrixIdentity();
 	XMMATRIX m_porjMatrix = XMMatrixIdentity();
 
-	Material m_customMaterial;
-	Material m_rustedIronMaterial;
+	std::vector<EnvInfo> m_enviroments;
 
 	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, -1.0f};
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
-	const XMVECTOR m_cameraPositionV = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
-	const XMFLOAT3 m_cameraPosition = { 0.0f, 0.0f, -10.0f };
 
-	// Settings
-	bool m_showRustedIronMateiral = false;
-	bool m_enableIBL = true;
+
+	const XMVECTOR m_focusPoint = XMVectorSet(0, 0, 0, 1);
+	const XMVECTOR m_upDirection = XMVectorSet(0, 1, 0, 0);
+	const XMVECTOR m_cameraClose = XMVectorSet(0.0f, 0.0f, -3.0f, 1.0f);
+	const XMVECTOR m_cameraFar = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
+	XMVECTOR m_cameraPosition = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
 
 	int m_sceneType = SceneType::SphereGrid;
 
+	struct MaterialSettings
+	{
+		std::vector<const char*> MaterialNames;
+		int SelectedMaterialId = 0;
+		bool DisableIbl = false;
 
+	} m_materialSettings;
+
+	std::vector<Material> m_material;
+
+	struct EnviromentSettings
+	{
+		std::vector<const char*> EnvNames;
+		int SelectedEnvNameId = 0;
+
+		enum SkyboxRenderMode
+		{
+			Disabled,
+			Enviroment,
+			Irradiance,
+			PrefilterdRadiance,
+		};
+
+		int RenderMode = SkyboxRenderMode::Enviroment;
+	} m_enviromentSettings;
 };
 
 
@@ -159,9 +229,7 @@ CREATE_APPLICATION(PbrDemo)
 void PbrDemo::LoadContent()
 {
 	{
-		const XMVECTOR focusPoint = XMVectorSet(0, 0, 0, 1);
-		const XMVECTOR upDirection = XMVectorSet(0, 1, 0, 0);
-		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPositionV, focusPoint, upDirection);
+		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
 
 		float aspectRatio = 
 			this->GetDevice()->GetCurrentSwapChainDesc().Width / static_cast<float>(this->GetDevice()->GetCurrentSwapChainDesc().Height);
@@ -183,53 +251,7 @@ void PbrDemo::LoadContent()
 		this->m_depthBuffer = this->GetDevice()->CreateTexture(desc);
 	}
 
-	ShaderDesc d = {};
-	d.shaderType = ShaderType::Vertex;
-
-	ShaderHandle vs = this->GetDevice()->CreateShader(d, gPbrDemoVS, sizeof(gPbrDemoVS));
-
-	d.shaderType = ShaderType::Pixel;
-	ShaderHandle ps = this->GetDevice()->CreateShader(d, gPbrDemoPS, sizeof(gPbrDemoPS));
-
-	// TODO I AM HERE: Add Colour and push Constants
-	GraphicsPipelineDesc pipelineDesc = {};
-	pipelineDesc.InputLayout =
-	{ 
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOUR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-	};
-
-	pipelineDesc.VS = vs;
-	pipelineDesc.PS = ps;
-	pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
-	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
-
-	BindlessShaderParameterLayout bindlessParameterLayout = {};
-	bindlessParameterLayout.MaxCapacity = UINT_MAX;
-	bindlessParameterLayout.AddParameterSRV(101);
-	bindlessParameterLayout.AddParameterSRV(102);
-
-	ShaderParameterLayout parameterLayout = {};
-	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfo) / 4);
-	parameterLayout.AddCBVParameter<1, 0>();
-	parameterLayout.AddSRVParameter<0, 0>();
-	parameterLayout.AddStaticSampler<0, 0>(
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-		1.0f);
-	parameterLayout.AddStaticSampler<1, 0>(
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP
-		);
-
-	pipelineDesc.UseShaderParameters = true;
-	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
-	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
-	pipelineDesc.ShaderParameters.AllowInputLayout();
-	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
+	this->CreateRenderPass();
 
 	this->m_imguiRenderer = std::make_unique<ImGuiRenderer>();
 
@@ -306,59 +328,18 @@ void PbrDemo::LoadContent()
 	copyContext.WriteBuffer<InstanceInfo>(this->m_instanceBuffer, instanceData);
 	copyContext.TransitionBarrier(this->m_instanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	auto albedo =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\rustediron2_basecolor.png",
-			copyContext,
-			BindFlags::ShaderResource);
-	auto normal =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\rustediron2_normal.png",
-			copyContext,
-			BindFlags::ShaderResource);
-	auto roughness =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\rustediron2_roughness.png",
-			copyContext,
-			BindFlags::ShaderResource);
-	auto metallic =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\rustediron2_metallic.png",
-			copyContext,
-			BindFlags::ShaderResource);
 
-	this->m_irradanceMap =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
-			copyContext,
-			BindFlags::ShaderResource);
-
-	this->m_prefilteredMap =
-		this->GetTextureStore()->Load(
-			"Assets\\Textures\\PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
-			copyContext,
-			BindFlags::ShaderResource);
+	this->LoadMaterials(copyContext);
+	this->LoadEnviroments(copyContext);
 
 	this->m_brdfLUT =
 		this->GetTextureStore()->Load(
-			"Assets\\Textures\\PaperMill_Ruins_E\\BrdfLut.dds",
+			"Assets\\Textures\\IBL\\BrdfLut.dds",
 			copyContext,
 			BindFlags::ShaderResource);
 
 	// Load IrradanceMap
 	this->GetDevice()->Submit(true);
-
-	this->m_customMaterial = {};
-	this->m_customMaterial.Albedo = XMFLOAT3{ 1.0f, 0.0f, 0.0f };
-	this->m_customMaterial.Ao = 0.3f;
-	this->m_customMaterial.Metallic = 0.4f;
-	this->m_customMaterial.Roughness = 1.0f;
-
-	this->m_rustedIronMaterial = {};
-	this->m_rustedIronMaterial.AlbedoTexIndex = this->GetDevice()->GetDescritporIndex(albedo);
-	this->m_rustedIronMaterial.NormalTexIndex = this->GetDevice()->GetDescritporIndex(normal);
-	this->m_rustedIronMaterial.RoughnessTexIndex = this->GetDevice()->GetDescritporIndex(roughness);
-	this->m_rustedIronMaterial.MetallicTexIndex = this->GetDevice()->GetDescritporIndex(metallic);
 }
 
 void PbrDemo::Update(double elapsedTime)
@@ -370,26 +351,74 @@ void PbrDemo::Update(double elapsedTime)
 	ImGui::Combo("Scene Type", &this->m_sceneType, SceneType::Names, IM_ARRAYSIZE(SceneType::Names));
 	ImGui::NewLine();
 
-	if (ImGui::CollapsingHeader("Material Info"))
+	this->m_cameraPosition = this->m_sceneType == SceneType::SphereGrid
+		? this->m_cameraFar
+		: this->m_cameraClose;
+	this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
+
+	if (ImGui::CollapsingHeader("Enviroment Settings"))
 	{
-		ImGui::Checkbox("Enable IBL", &this->m_enableIBL);
+		ImGui::Combo("Skybox Render Mode", &this->m_enviromentSettings.RenderMode, RenderModelNames, IM_ARRAYSIZE(RenderModelNames));
+
+		if (this->m_enviromentSettings.RenderMode != EnviromentSettings::SkyboxRenderMode::Disabled)
+		{
+			ImGui::Combo(
+				"Skybox",
+				&this->m_enviromentSettings.SelectedEnvNameId,
+				this->m_enviromentSettings.EnvNames.data(),
+				this->m_enviromentSettings.EnvNames.size());
+		}
+
+	}
+	if (ImGui::CollapsingHeader("Material Settings"))
+	{
+		ImGui::Checkbox("Disable IBL", &this->m_materialSettings.DisableIbl);
 
 		switch (this->m_sceneType)
 		{
-		case SceneType::TexturedMaterials:
-			break;
 		case SceneType::SphereGrid:
-			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_customMaterial.Albedo));
-			ImGui::DragFloat("AO", &this->m_customMaterial.Ao, 0.01f, 0.0f, 1.0f);
+		{
+			this->m_materialSettings.SelectedMaterialId = 0;
+			auto& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
+			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&selectedMaterial.Albedo));
+			ImGui::DragFloat("AO", &selectedMaterial.Ao, 0.01f, 0.0f, 1.0f);
 			ImGui::TextWrapped("Roughtness increases by Coloumn Left(0.0f) ---> Right(1.0f)");
 			ImGui::TextWrapped("Mettalic increates by row Top(0.0f) ---> Bottom(1.0f)");
+		}
 			break;
+
+		case SceneType::TexturedMaterials:
 		case SceneType::Sphere:
-		default:
-			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&this->m_customMaterial.Albedo));
-			ImGui::DragFloat("Roughness", &this->m_customMaterial.Roughness, 0.01f, 0.0f, 1.0f);
-			ImGui::DragFloat("Metallic", &this->m_customMaterial.Metallic, 0.01f, 0.0f, 1.0f);
-			ImGui::DragFloat("AO", &this->m_customMaterial.Ao, 0.01f, 0.0f, 1.0f);
+		{
+
+			ImGui::Combo(
+				"Material Type",
+				&this->m_materialSettings.SelectedMaterialId,
+				this->m_materialSettings.MaterialNames.data(),
+				this->m_materialSettings.MaterialNames.size());
+
+			auto& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
+
+			if (selectedMaterial.AlbedoTexIndex == INVALID_DESCRIPTOR_INDEX)
+			{
+				ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&selectedMaterial.Albedo));
+			}
+
+			if (selectedMaterial.RoughnessTexIndex== INVALID_DESCRIPTOR_INDEX)
+			{
+				ImGui::DragFloat("Roughness", &selectedMaterial.Roughness, 0.01f, 0.0f, 1.0f);
+			}
+
+			if (selectedMaterial.MetallicTexIndex == INVALID_DESCRIPTOR_INDEX)
+			{
+				ImGui::DragFloat("Metallic", &selectedMaterial.Metallic, 0.01f, 0.0f, 1.0f);
+			}
+
+			if (selectedMaterial.AoTexIndex == INVALID_DESCRIPTOR_INDEX)
+			{
+				ImGui::DragFloat("AO", &selectedMaterial.Ao, 0.01f, 0.0f, 1.0f);
+			}
+		}
 		}
 	}
 
@@ -420,7 +449,7 @@ void PbrDemo::Render()
 	}
 
 	{
-		ScopedMarker m = gfxContext.BeginScropedMarker("Draw Triangle");
+		ScopedMarker m = gfxContext.BeginScropedMarker("Main Render Pass");
 
 		const SwapChainDesc& swapChainDesc = this->GetDevice()->GetCurrentSwapChainDesc();
 
@@ -438,21 +467,21 @@ void PbrDemo::Render()
 
 		gfxContext.SetGraphicsState(s);
 
-
 		SceneInfo sceneInfo = {};
 		this->ComputeMatrices(
 			this->m_viewMatrix,
 			this->m_porjMatrix,
 			sceneInfo.ViewProjectionMatrix);
 
-		sceneInfo.CameraPosition = this->m_cameraPosition;
+		XMStoreFloat3(&sceneInfo.CameraPosition, this->m_cameraPosition);
 		sceneInfo.SunColour = this->m_sunColour;
 		sceneInfo.SunDirection = this->m_sunDirection;
 
-		if (this->m_enableIBL)
+		if (!this->m_materialSettings.DisableIbl)
 		{
-			sceneInfo.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_irradanceMap);
-			sceneInfo.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_prefilteredMap);
+			auto& envInfo = this->m_enviroments[this->m_enviromentSettings.SelectedEnvNameId];
+			sceneInfo.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(envInfo.IrradanceMap);
+			sceneInfo.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(envInfo.PrefilteredMap);
 			sceneInfo.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
 		}
 
@@ -461,10 +490,19 @@ void PbrDemo::Render()
 
 		DrawInfo drawInfo = {};
 
+		Material& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
+		drawInfo.Albedo = selectedMaterial.Albedo;
+		drawInfo.AlbedoTexIndex = selectedMaterial.AlbedoTexIndex;
+		drawInfo.Roughness = selectedMaterial.Roughness;
+		drawInfo.RoughnessTexIndex = selectedMaterial.RoughnessTexIndex;
+		drawInfo.Metallic = selectedMaterial.Metallic;
+		drawInfo.MetallicTexIndex = selectedMaterial.MetallicTexIndex;
+		drawInfo.Ao = selectedMaterial.Ao;
+		drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
+		drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
+		
 		if (this->m_sceneType == SceneType::SphereGrid)
 		{
-			drawInfo.Albedo = this->m_customMaterial.Albedo;
-			drawInfo.Ao = this->m_customMaterial.Ao;
 			drawInfo.InstanceIndex = SphereGridInstanceDataOffset;
 			for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
 			{
@@ -482,24 +520,17 @@ void PbrDemo::Render()
 		else
 		{
 			drawInfo.InstanceIndex = 0;
-			
-			drawInfo.Albedo = this->m_customMaterial.Albedo;
-			drawInfo.AlbedoTexIndex = this->m_customMaterial.AlbedoTexIndex;
-			drawInfo.Roughness = this->m_customMaterial.Roughness;
-			drawInfo.RoughnessTexIndex = this->m_customMaterial.RoughnessTexIndex;
-			drawInfo.Metallic = this->m_customMaterial.Metallic;
-			drawInfo.MetallicTexIndex = this->m_customMaterial.MetallicTexIndex;
-			drawInfo.Ao = this->m_customMaterial.Ao;
-			drawInfo.NormalTexIndex = this->m_customMaterial.NormalTexIndex;
-
-			// based on scene draw a specific way
 			gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-
 			gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
 		}
 	}
+
 	{
-		ScopedMarker m = gfxContext.BeginScropedMarker("Draw ImGui");
+		ScopedMarker m = gfxContext.BeginScropedMarker("Render Skybox");
+	}
+
+	{
+		ScopedMarker m = gfxContext.BeginScropedMarker("Draw ImGui UI");
 
 		this->m_imguiRenderer->Draw(gfxContext, this->GetDevice());
 	}
@@ -528,7 +559,287 @@ std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)
 		interleavedData[i].TexCoord = meshData.TexCoords[i];
 		interleavedData[i].Normal = meshData.Normal[i];
 		interleavedData[i].Colour = meshData.Colour[i];
+		interleavedData[i].Tangent = meshData.Tangents[i];
+		interleavedData[i].BiTangent= meshData.BiTangents[i];
 	}
 
 	return interleavedData;
+}
+
+void PbrDemo::LoadMaterials(ICommandContext& context)
+{
+	// Load Custom Material
+	{
+		Material& material = m_material.emplace_back();
+		material.Albedo = XMFLOAT3{ 1.0f, 0.0f, 0.0f };
+		material.Ao = 0.3f;
+		material.Metallic = 0.4f;
+		material.Roughness = 1.0f;
+
+		this->m_materialSettings.MaterialNames.emplace_back("Custom Material");
+	}
+
+	const std::string BaseDir = "Assets\\Textures\\\Materials\\";
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"rustediron2\\rustediron2_basecolor.png",
+			"rustediron2\\rustediron2_normal.png",
+			"rustediron2\\rustediron2_roughness.png",
+			"rustediron2\\rustediron2_metallic.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("rusted iron");
+	}
+
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"gray-granite-flecks\\gray-granite-flecks-albedo.png",
+			"gray-granite-flecks\\gray-granite-flecks-Normal-dx.png",
+			"gray-granite-flecks\\gray-granite-flecks-Roughness.png",
+			"gray-granite-flecks\\gray-granite-flecks-Metallic.png",
+			"gray-granite-flecks\\gray-granite-flecks-ao.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("gray granite flecks");
+	}
+
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"redbricks2b\\redbricks2b-albedo.png",
+			"redbricks2b\\redbricks2b-normal.png",
+			"redbricks2b\\redbricks2b-rough.png",
+			"redbricks2b\\redbricks2b-metalness.png",
+			"redbricks2b\\redbricks2b-ao.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("red bricks");
+	}
+
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"worn-shiny-metal\\worn-shiny-metal-albedo.png",
+			"worn-shiny-metal\\worn-shiny-metal-Normal-dx.png",
+			"worn-shiny-metal\\worn-shiny-metal-Roughness.png",
+			"worn-shiny-metal\\worn-shiny-metal-Metallic.png",
+			"worn-shiny-metal\\worn-shiny-metal-ao.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("stworn shiny metal");
+	}
+
+	{
+		Material& material = this->m_material.emplace_back();
+		this->LoadMaterial(
+			context,
+			BaseDir,
+			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_albedo.png",
+			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_normal-dx.png",
+			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_roughness.png",
+			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_metallic.png",
+			"outdoor-polyester-fabric1\\outdoor-polyester-fabric_ao.png",
+			material);
+
+		this->m_materialSettings.MaterialNames.emplace_back("polyester fabric1");
+	}
+}
+
+void PbrDemo::LoadMaterial(
+	ICommandContext& context,
+	std::string const& basePath,
+	std::string const& albedoPath,
+	std::string const& bumpMapPath,
+	std::string const& roughnessPath,
+	std::string const& metallicPath,
+	Material& outMaterial)
+{
+	auto albedo =
+		this->GetTextureStore()->Load(
+			basePath + albedoPath,
+			context,
+			BindFlags::ShaderResource);
+	auto normal =
+		this->GetTextureStore()->Load(
+			basePath + bumpMapPath,
+			context,
+			BindFlags::ShaderResource);
+	auto roughness =
+		this->GetTextureStore()->Load(
+			basePath + roughnessPath,
+			context,
+
+			BindFlags::ShaderResource);
+	auto metallic =
+		this->GetTextureStore()->Load(
+			basePath + metallicPath,
+			context,
+			BindFlags::ShaderResource);
+
+
+	outMaterial.AlbedoTexIndex = this->GetDevice()->GetDescritporIndex(albedo);
+	outMaterial.NormalTexIndex = this->GetDevice()->GetDescritporIndex(normal);
+	outMaterial.RoughnessTexIndex = this->GetDevice()->GetDescritporIndex(roughness);
+	outMaterial.MetallicTexIndex = this->GetDevice()->GetDescritporIndex(metallic);
+}
+
+void PbrDemo::LoadMaterial(
+	ICommandContext& context,
+	std::string const& basePath,
+	std::string const& albedoPath,
+	std::string const& bumpMapPath,
+	std::string const& roughnessPath, 
+	std::string const& metallicPath,
+	std::string const& aoPath,
+	Material& outMaterial)
+{
+	this->LoadMaterial(
+		context,
+		basePath,
+		albedoPath,
+		bumpMapPath,
+		roughnessPath,
+		metallicPath,
+		outMaterial);
+
+	auto ao =
+		this->GetTextureStore()->Load(
+			basePath + aoPath,
+			context,
+			BindFlags::ShaderResource);
+
+	outMaterial.AoTexIndex = this->GetDevice()->GetDescritporIndex(ao);
+}
+
+void PbrDemo::LoadEnviroments(ICommandContext& context)
+{
+	const std::string BaseDir = "Assets\\Textures\\\IBL\\";
+	{
+		EnvInfo& envInfo = this->m_enviroments.emplace_back();
+		this->LoadEnvData(
+			context,
+			BaseDir,
+			"PaperMill_Ruins_E\\PaperMill_Skybox.dds",
+			"PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			"PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
+			envInfo);
+
+		this->m_enviromentSettings.EnvNames.emplace_back("Paper Mill Ruins");
+	}
+
+	{
+		EnvInfo& envInfo = this->m_enviroments.emplace_back();
+		this->LoadEnvData(
+			context,
+			BaseDir,
+			"Serpentine_Valley\\output_skybox.dds",
+			"Serpentine_Valley\\output_irradiance.dds",
+			"Serpentine_Valley\\output_radiance.dds",
+			envInfo);
+
+		this->m_enviromentSettings.EnvNames.emplace_back("Serpentine Valley");
+	}
+
+	{
+		EnvInfo& envInfo = this->m_enviroments.emplace_back();
+		this->LoadEnvData(
+			context,
+			BaseDir,
+			"cmftStudio\\output_skybox.dds",
+			"cmftStudio\\output_irradiance.dds",
+			"cmftStudio\\output_radiance.dds",
+			envInfo);
+
+		this->m_enviromentSettings.EnvNames.emplace_back("Cmft Studio");
+	}
+}
+
+void PbrDemo::LoadEnvData(
+	ICommandContext& context,
+	std::string const& basePath,
+	std::string const& skyboxPath,
+	std::string const& irradanceMapPath,
+	std::string const& prefilteredRadanceMapPath,
+	EnvInfo& outEnviroment)
+{
+	outEnviroment.SkyBox =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
+			context,
+			BindFlags::ShaderResource);
+
+	outEnviroment.IrradanceMap =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			context,
+			BindFlags::ShaderResource);
+
+	outEnviroment.PrefilteredMap =
+		this->GetTextureStore()->Load(
+			"Assets\\Textures\\IBL\\PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
+			context,
+			BindFlags::ShaderResource);
+}
+
+void PbrDemo::CreateRenderPass()
+{
+	ShaderDesc d = {};
+	d.shaderType = ShaderType::Vertex;
+
+	ShaderHandle vs = this->GetDevice()->CreateShader(d, gPbrDemoVS, sizeof(gPbrDemoVS));
+
+	d.shaderType = ShaderType::Pixel;
+	ShaderHandle ps = this->GetDevice()->CreateShader(d, gPbrDemoPS, sizeof(gPbrDemoPS));
+
+	// TODO I AM HERE: Add Colour and push Constants
+	GraphicsPipelineDesc pipelineDesc = {};
+	pipelineDesc.InputLayout =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "COLOUR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "BITANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
+
+	pipelineDesc.VS = vs;
+	pipelineDesc.PS = ps;
+	pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
+	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
+
+	BindlessShaderParameterLayout bindlessParameterLayout = {};
+	bindlessParameterLayout.MaxCapacity = UINT_MAX;
+	bindlessParameterLayout.AddParameterSRV(101);
+	bindlessParameterLayout.AddParameterSRV(102);
+
+	ShaderParameterLayout parameterLayout = {};
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfo) / 4);
+	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddSRVParameter<0, 0>();
+	parameterLayout.AddStaticSampler<0, 0>(
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+		1.0f);
+	parameterLayout.AddStaticSampler<1, 0>(
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP
+		);
+
+	pipelineDesc.UseShaderParameters = true;
+	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
+	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
+	pipelineDesc.ShaderParameters.AllowInputLayout();
+	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
 }

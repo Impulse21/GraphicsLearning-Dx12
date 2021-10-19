@@ -14,6 +14,7 @@ struct DrawInfo
     uint NormalTexIndex;
     uint MetallicTexIndex;
     uint RoughnessTexIndex;
+    uint AoTexIndex;
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
@@ -44,14 +45,17 @@ struct VSInput
     float3 Normal : NORMAL;
     float3 Colour   : COLOUR;
     float2 TexCoord : TEXCOORD;
+    float4 Tangent : TANGENT;
+    float4 BiTangent : BITANGENT;
 };
 
 struct VsOutput
 {
-    float3 NormalWS : NORMAL;
-    float4 Colour : COLOUR;
-    float2 TexCoord : TEXCOORD;
-    float3 PositionWS : Position;
+    float3 NormalWS     : NORMAL;
+    float4 Colour       : COLOUR;
+    float2 TexCoord     : TEXCOORD;
+    float3 PositionWS   : Position;
+    float3x3 TBN          : TBN;
     float4 Position : SV_POSITION;
 };
 
@@ -68,5 +72,11 @@ VsOutput main(VSInput input)
     output.TexCoord = input.TexCoord;
     output.Colour = float4(input.Colour, 1.0f);
     
+    float3 TangentWS = mul(input.Tangent.xyz, (float3x3) worldMatrix);
+    float3 BiTangentWS = mul(input.BiTangent.xyz, (float3x3) worldMatrix);
+    
+    // Calculate TBN Matrix
+    output.TBN = float3x3(normalize(TangentWS), normalize(BiTangentWS), normalize(output.NormalWS));
+    output.TBN = transpose(output.TBN);
     return output;
 }

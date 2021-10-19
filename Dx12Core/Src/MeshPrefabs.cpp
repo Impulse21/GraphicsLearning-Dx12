@@ -18,7 +18,14 @@ static void ReverseWinding(MeshData& meshData)
 // http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-13-normal-mapping/#tangent-and-bitangent
 static void ComputeTangentSpace(MeshData& meshData) 
 {
-	assert(meshData.Indices.size() % 3);
+	assert(meshData.Indices.size() % 3 == 0);
+
+	const size_t vertexCount = meshData.Positions.size();
+	meshData.Tangents.resize(vertexCount);
+	meshData.BiTangents.resize(vertexCount);
+
+	std::vector<XMVECTOR> tangents(vertexCount);
+	std::vector<XMVECTOR> bitangents(vertexCount);
 
 	for (int i = 0; i < meshData.Indices.size(); i += 3)
 	{
@@ -27,25 +34,53 @@ static void ComputeTangentSpace(MeshData& meshData)
 		auto& index2 = meshData.Indices[i + 2];
 
 		// Vertices
-		XMFLOAT3 pos[3];
-		pos [0] = meshData.Positions[index0];
-		pos [1] = meshData.Positions[index1];
-		pos [2] = meshData.Positions[index2];
-
-		XMFLOAT3 normals[3];
-		normals[0] = meshData.Normal[index0];
-		normals[1] = meshData.Normal[index1];
-		normals[2] = meshData.Normal[index2];
+		XMVECTOR pos0 = XMLoadFloat3(&meshData.Positions[index0]);
+		XMVECTOR pos1 = XMLoadFloat3(&meshData.Positions[index1]);
+		XMVECTOR pos2 = XMLoadFloat3(&meshData.Positions[index2]);
 
 		// UVs
-		XMFLOAT2 uvs[3];
-		uvs[0] = meshData.TexCoords[index0];
-		uvs[1] = meshData.TexCoords[index1];
-		uvs[2] = meshData.TexCoords[index2];
+		XMVECTOR uvs0 = XMLoadFloat2(&meshData.TexCoords[index0]);
+		XMVECTOR uvs1 = XMLoadFloat2(&meshData.TexCoords[index1]);
+		XMVECTOR uvs2 = XMLoadFloat2(&meshData.TexCoords[index2]);
 
-		XMFLOAT4 tangent[3];
+		XMVECTOR deltaPos1 = pos1 - pos0;
+		XMVECTOR deltaPos2 = pos2 - pos0;
 
-		// ComputeTangentFrame(idx, 1, pos, normals, t, 3, tangent);
+		XMVECTOR deltaUV1 = uvs1 - uvs0;
+		XMVECTOR deltaUV2 = uvs2 - uvs0;
+
+		// TODO: Take advantage of SIMD better here
+		float r = 1.0f / (XMVectorGetX(deltaUV1) * XMVectorGetY(deltaUV2) - XMVectorGetY(deltaUV1) * XMVectorGetX(deltaUV2));
+
+		XMVECTOR tangent = (deltaPos1 * XMVectorGetY(deltaUV2) - deltaPos2 * XMVectorGetY(deltaUV1)) * r;
+		XMVECTOR bitangent = (deltaPos2 * XMVectorGetX(deltaUV1) - deltaPos1 * XMVectorGetX(deltaUV2)) * r;
+
+		tangents[index0] += tangent;
+		tangents[index1] += tangent;
+		tangents[index2] += tangent;
+
+		bitangents[index0] += bitangent;
+		bitangents[index1] += bitangent;
+		bitangents[index2] += bitangent;
+	}
+
+	for (int i = 0; i < vertexCount; i++)
+	{
+		const XMVECTOR normal = XMLoadFloat3(&meshData.Normal[i]);
+		const XMVECTOR& tangent = tangents[i];
+		const XMVECTOR& bitangent = bitangents[i];
+
+		// Gram-Schmidt orthogonalize
+		XMVECTOR orthTangent = XMVector3Normalize(tangent - normal * XMVector3Dot(normal, tangent));
+		XMVectorSetW(tangent, 1.0f);
+
+		if (XMVectorGetX(XMVector3Dot(XMVector3Cross(normal, tangent), bitangent)) < 0.0f)
+		{
+			orthTangent = -1.0f * orthTangent;
+		}
+
+		DirectX::XMStoreFloat4(&meshData.Tangents[i], orthTangent);
+		DirectX::XMStoreFloat4(&meshData.BiTangents[i], bitangent);
 	}
 }
 
@@ -201,6 +236,8 @@ MeshData Dx12Core::MeshPrefabs::CreateSphere(float diameter, size_t tessellation
 			outMeshData.Indices.push_back(static_cast<uint16_t>(nextI * stride + nextJ));
 		}
 	}
+
+	ComputeTangentSpace(outMeshData);
 
 	if (rhcoords)
 	{

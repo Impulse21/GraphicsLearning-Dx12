@@ -15,6 +15,7 @@ struct DrawInfo
     uint NormalTexIndex;
     uint MetallicTexIndex;
     uint RoughnessTexIndex;
+    uint AoTexIndex;
 };
 
 ConstantBuffer<DrawInfo> DrawInfoCB : register(b0);
@@ -44,6 +45,7 @@ struct PSInput
     float4 Colour : COLOUR;
     float2 TexCoord : TEXCOORD;
     float3 PositionWS : Position;
+    float3x3 TBN : TBN;
 };
     
 // Constant normal incidence Fresnel factor for all dielectrics.
@@ -71,12 +73,18 @@ float4 main(PSInput input) : SV_Target
     }
     
     float ao = DrawInfoCB.Ao;
+    if (DrawInfoCB.AoTexIndex != InvalidDescriptorIndex)
+    {
+        ao = Texture2DTable[DrawInfoCB.AoTexIndex].Sample(SamplerDefault, input.TexCoord).r;
+    }
     
     float3 normal = input.NormalWS;
     if (DrawInfoCB.NormalTexIndex != InvalidDescriptorIndex)
     {
-        return Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord);
+        normal = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).rgb * 2.0 - 1.0;;
+        normal = normalize(mul(normal, input.TBN));
     }
+    
     // -- End Material Collection ---
     
     // -- Lighting Model ---
