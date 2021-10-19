@@ -114,7 +114,7 @@ float4 main(PSInput input) : SV_Target
     if (DrawInfoCB.NormalTexIndex != InvalidDescriptorIndex)
     {
         float3x3 tbn = float3x3(tangent, biTangent, normal);
-        normal = Texture2DTable[DrawInfoCB.AlbedoTexIndex].Sample(SamplerDefault, input.TexCoord).rgb * 2.0 - 1.0;;
+        normal = Texture2DTable[DrawInfoCB.NormalTexIndex].Sample(SamplerDefault, input.TexCoord).rgb * 2.0 - 1.0;;
         normal = normalize(mul(normal, tbn));
     }
     
