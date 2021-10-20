@@ -5,6 +5,9 @@
 #include "Shaders/PbrDemoVS_compiled.h"
 #include "Shaders/PbrDemoPS_compiled.h""
 
+#include "Shaders/SkyboxVS_compiled.h"
+#include "Shaders/SkyboxPS_compiled.h"
+
 #include <imgui.h>
 #include "Dx12Core/ImGui/ImGuiRenderer.h"
 
@@ -133,6 +136,7 @@ protected:
 
 private:
 	void XM_CALLCONV ComputeMatrices(CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& modelViewProjection);
+	void XM_CALLCONV ComputeMatrices(CXMMATRIX world, CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& modelViewProjection);
 
 	std::vector<Vertex> InterleaveVertexData(MeshData const& meshData);
 
@@ -165,8 +169,8 @@ private:
 		std::string const& prefilteredRadanceMapPath,
 		EnvInfo& outEnviroment);
 
-	void CreateRenderPass();
-	void CreateRenderPassSkybox();
+	void CreateMainPso();
+	void CreateSkyboxData(ICommandContext& context);
 
 private:
 	const size_t SphereGridMaxRows = 6;
@@ -181,12 +185,24 @@ private:
 	BufferHandle m_vertexbuffer;
 	BufferHandle m_indexBuffer;
 
-	MeshData m_sphereMesh;
 	BufferHandle m_gridInstanceBuffer;
 	BufferHandle m_centerMeshInstanceBuffer;
 	BufferHandle m_texturedMeshInstanceBuffer;
 
+	MeshData m_sphereMesh;
 	GraphicsPipelineHandle m_pipelineState;
+
+	struct SkyboxCB
+	{
+		XMFLOAT4X4 ViewProjectionMatrix = {};
+		uint32_t skyboxTexIndex = INVALID_DESCRIPTOR_INDEX;
+	};
+
+	MeshData m_skyboxMesh;
+	BufferHandle m_skyboxVertexBuffer;
+	BufferHandle m_skyboxIndexBuffer;
+	GraphicsPipelineHandle m_skyboxPso;
+
 	TextureHandle m_depthBuffer;
 
 	XMMATRIX m_viewMatrix = XMMatrixIdentity();
@@ -265,13 +281,15 @@ void PbrDemo::LoadContent()
 		this->m_depthBuffer = this->GetDevice()->CreateTexture(desc);
 	}
 
-	this->CreateRenderPass();
+	this->CreateMainPso();
 
 	this->m_imguiRenderer = std::make_unique<ImGuiRenderer>();
 
 	this->m_imguiRenderer->Initialize(this->GetWindow(), this->GetDevice());
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
+
+	this->CreateSkyboxData(copyContext);
 
 	this->m_sphereMesh = MeshPrefabs::CreateSphere(1.0f, 16, true);
 
@@ -527,10 +545,10 @@ void PbrDemo::Render()
 		gfxContext.ClearDepthStencilTexture(this->m_depthBuffer, true, 1.0f, false, 0);
 	}
 
+	const SwapChainDesc& swapChainDesc = this->GetDevice()->GetCurrentSwapChainDesc();
+
 	{
 		ScopedMarker m = gfxContext.BeginScropedMarker("Main Render Pass");
-
-		const SwapChainDesc& swapChainDesc = this->GetDevice()->GetCurrentSwapChainDesc();
 
 		GraphicsState s = {};
 		s.VertexBuffer = this->m_vertexbuffer;
@@ -629,8 +647,50 @@ void PbrDemo::Render()
 		}
 	}
 
+	if (this->m_enviromentSettings.RenderMode != EnviromentSettings::SkyboxRenderMode::Disabled)
 	{
 		ScopedMarker m = gfxContext.BeginScropedMarker("Render Skybox");
+
+		GraphicsState s = {};
+		s.VertexBuffer = this->m_skyboxVertexBuffer;
+		s.IndexBuffer = this->m_skyboxIndexBuffer;
+		s.PipelineState = this->m_skyboxPso;
+		s.Viewports.push_back(Viewport(swapChainDesc.Width, swapChainDesc.Height));
+		s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
+
+		// TODO: Device should return a handle rather then a week refernce so the context
+		// can track the resource.
+		s.RenderTargets.push_back(this->GetDevice()->GetCurrentBackBuffer());
+		s.DepthStencil = this->m_depthBuffer;
+		gfxContext.SetGraphicsState(s);
+
+		SkyboxCB skyboxCb = {};
+
+		auto& selectedEnv = this->m_enviroments[this->m_enviromentSettings.SelectedEnvNameId];
+
+		switch (this->m_enviromentSettings.RenderMode)
+		{
+		case  EnviromentSettings::SkyboxRenderMode::Irradiance:
+			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.IrradanceMap);
+			break;
+		case  EnviromentSettings::SkyboxRenderMode::PrefilterdRadiance:
+			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.PrefilteredMap);
+			break;
+		case  EnviromentSettings::SkyboxRenderMode::Enviroment:
+		default:
+			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.SkyBox);
+		}
+
+		// The view matrix should only consider the camera's rotation, but not the translation.
+		// Camera position, 
+		this->ComputeMatrices(
+			this->m_viewMatrix,
+			this->m_porjMatrix,
+			skyboxCb.ViewProjectionMatrix);
+
+		gfxContext.BindGraphics32BitConstants<SkyboxCB>(0, skyboxCb);
+		gfxContext.DrawIndexed(this->m_skyboxMesh.Indices.size());
+
 	}
 
 	{
@@ -651,6 +711,12 @@ void XM_CALLCONV PbrDemo::ComputeMatrices(CXMMATRIX view, CXMMATRIX projection, 
 {
 	XMMATRIX m = view * projection;
 	XMStoreFloat4x4(&viewProjection, XMMatrixTranspose(m));
+}
+
+void XM_CALLCONV PbrDemo::ComputeMatrices(CXMMATRIX world, CXMMATRIX view, CXMMATRIX projection, XMFLOAT4X4& modelViewProjection)
+{
+	XMMATRIX m = world * view * projection;
+	XMStoreFloat4x4(&modelViewProjection, XMMatrixTranspose(m));
 }
 
 std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)
@@ -924,7 +990,7 @@ void PbrDemo::LoadEnvData(
 			BindFlags::ShaderResource);
 }
 
-void PbrDemo::CreateRenderPass()
+void PbrDemo::CreateMainPso()
 {
 	ShaderDesc d = {};
 	d.shaderType = ShaderType::Vertex;
@@ -934,7 +1000,6 @@ void PbrDemo::CreateRenderPass()
 	d.shaderType = ShaderType::Pixel;
 	ShaderHandle ps = this->GetDevice()->CreateShader(d, gPbrDemoPS, sizeof(gPbrDemoPS));
 
-	// TODO I AM HERE: Add Colour and push Constants
 	GraphicsPipelineDesc pipelineDesc = {};
 	pipelineDesc.InputLayout =
 	{
@@ -974,4 +1039,81 @@ void PbrDemo::CreateRenderPass()
 	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
 	pipelineDesc.ShaderParameters.AllowInputLayout();
 	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
+
+}
+
+void PbrDemo::CreateSkyboxData(ICommandContext& context)
+{
+	// Intentioanlly don't reverse coords so we can render the inside of the cube.
+	this->m_skyboxMesh = MeshPrefabs::CreateCube();
+	{
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::VertexBuffer;
+		bufferDesc.DebugName = L"Skybox Vertex Buffer";
+		bufferDesc.SizeInBytes = sizeof(XMFLOAT3) * this->m_skyboxMesh.Positions.size();
+		bufferDesc.StrideInBytes = sizeof(XMFLOAT3);
+
+		this->m_skyboxVertexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
+
+		// Upload Buffer
+		context.WriteBuffer<XMFLOAT3>(this->m_skyboxVertexBuffer, this->m_skyboxMesh.Positions);
+		context.TransitionBarrier(this->m_skyboxVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	}
+
+	{
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::IndexBuffer;
+		bufferDesc.DebugName = L"Skybox Index Buffer";
+		bufferDesc.SizeInBytes = sizeof(uint16_t) * this->m_skyboxMesh.Indices.size();
+		bufferDesc.StrideInBytes = sizeof(uint16_t);
+
+		this->m_skyboxIndexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
+
+		context.WriteBuffer<uint16_t>(this->m_skyboxIndexBuffer, this->m_skyboxMesh.Indices);
+		context.TransitionBarrier(this->m_skyboxIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	}
+
+	ShaderDesc d = {};
+	d.shaderType = ShaderType::Vertex;
+
+	ShaderHandle vs = this->GetDevice()->CreateShader(d, gSkyboxVS, sizeof(gSkyboxVS));
+
+	d.shaderType = ShaderType::Pixel;
+	ShaderHandle ps = this->GetDevice()->CreateShader(d, gSkyboxPS, sizeof(gSkyboxPS));
+
+	// TODO I AM HERE: Add Colour and push Constants
+	GraphicsPipelineDesc pipelineDesc = {};
+	pipelineDesc.InputLayout =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
+
+	pipelineDesc.VS = vs;
+	pipelineDesc.PS = ps;
+	pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	pipelineDesc.RenderState.RtvFormats.push_back(this->GetDevice()->GetCurrentSwapChainDesc().Format);
+	pipelineDesc.RenderState.DsvFormat = DXGI_FORMAT_D32_FLOAT;
+
+	BindlessShaderParameterLayout bindlessParameterLayout = {};
+	bindlessParameterLayout.MaxCapacity = UINT_MAX;
+	bindlessParameterLayout.AddParameterSRV(102);
+
+	ShaderParameterLayout parameterLayout = {};
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(SkyboxCB) / 4);
+	parameterLayout.AddStaticSampler<0, 0>(
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+		1.0f);
+
+	pipelineDesc.UseShaderParameters = true;
+	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
+	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
+	pipelineDesc.ShaderParameters.AllowInputLayout();
+	CD3DX12_DEPTH_STENCIL_DESC depthState = {};
+	depthState.DepthEnable = true;
+	depthState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	depthState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+
+	pipelineDesc.RenderState.DepthStencilState = &depthState;
+	this->m_skyboxPso = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
 }

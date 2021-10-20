@@ -10,7 +10,8 @@ set(shader_source_vs
     Src/TexturedCubeVS.hlsl
     Src/BindlessExampleVS.hlsl
     Src/ImGuiVS.hlsl
-    Src/PbrDemoVS.hlsl)
+    Src/PbrDemoVS.hlsl
+    Src/SkyboxVS.hlsl)
     
 set(shader_source_ps
     Src/TrianglePS.hlsl
@@ -18,7 +19,8 @@ set(shader_source_ps
     Src/TexturedCubePS.hlsl
     Src/BindlessExamplePS.hlsl
     Src/ImGuiPS.hlsl
-    Src/PbrDemoPS.hlsl)
+    Src/PbrDemoPS.hlsl
+    Src/SkyboxPS.hlsl)
 
 set(shader_headers
     Src/Defines.hlsli
@@ -38,7 +40,9 @@ set(shader_source_includes
     Include/Shaders/ImGuiVS_compiled.h
     Include/Shaders/ImGuiPS_compiled.h
     Include/Shaders/PbrDemoVS_compiled.h
-    Include/Shaders/PbrDemoPS_compiled.h)
+    Include/Shaders/PbrDemoPS_compiled.h
+    Include/Shaders/SkyboxVS_compiled.h
+    Include/Shaders/SkyboxPS_compiled.h)
 
 # first is extra debug flags
 set_source_files_properties(${shader_source_vs} PROPERTIES VS_SHADER_FLAGS "/Fh \"${PROJECT_SOURCE_DIR}/Include/Shaders/%(Filename)_compiled.h\" /Vn \"g%(Filename)\" /Zi /Od /Qembed_debug" VS_SHADER_TYPE Vertex VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
