@@ -84,6 +84,48 @@ static void ComputeTangentSpace(MeshData& meshData)
 	}
 }
 
+MeshData Dx12Core::MeshPrefabs::CreatePlane(float width, float height, bool rhcoords)
+{
+	MeshData meshData = {};
+	meshData.Positions =
+	{
+		XMFLOAT3(-0.5f * width, 0.0f,  0.5f * height),
+		XMFLOAT3(0.5f * width, 0.0f,  0.5f * height),
+		XMFLOAT3(0.5f * width, 0.0f, -0.5f * height),
+		XMFLOAT3(-0.5f * width, 0.0f, -0.5f * height)
+	};
+
+	meshData.Normal =
+	{
+		XMFLOAT3(0.0f, 1.0f, 0.0f),
+		XMFLOAT3(0.0f, 1.0f, 0.0f),
+		XMFLOAT3(0.0f, 1.0f, 0.0f),
+		XMFLOAT3(0.0f, 1.0f, 0.0f),
+	};
+
+	meshData.TexCoords =
+	{
+		 XMFLOAT2(0.0f, 0.0f),
+		 XMFLOAT2(1.0f, 0.0f),
+		 XMFLOAT2(1.0f, 1.0f),
+		 XMFLOAT2(0.0f, 1.0f),
+	};
+
+	meshData.Indices =
+	{
+		0, 3, 1, 1, 3, 2
+	};
+
+	ComputeTangentSpace(meshData);
+
+	if (rhcoords)
+	{
+		ReverseWinding(meshData);
+	}
+
+	return meshData;
+}
+
 MeshData Dx12Core::MeshPrefabs::CreateCube(float size, bool rhsCoord)
 {
 

@@ -20,6 +20,11 @@ namespace Dx12Core
 	class MeshPrefabs
 	{
 	public:
+		static MeshData CreatePlane(
+			float width = 1.0f,
+			float height = 1.0f,
+			bool rhcoords = false);
+
 		static MeshData CreateCube(
 			float size = 1,
 			bool rhsCoord = false);

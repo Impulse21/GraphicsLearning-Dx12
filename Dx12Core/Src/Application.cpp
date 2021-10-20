@@ -35,7 +35,7 @@ void Dx12Core::ApplicationDx12Base::Initialize(IGraphicsDevice* graphicsDevice)
 
 void Dx12Core::ApplicationDx12Base::Run()
 {
-	this->m_previousFrameTimestamp = glfwGetTime();
+	this->m_frameStatistics.PreviousFrameTimestamp = glfwGetTime();
 
 	this->LoadContent();
 	while (!glfwWindowShouldClose(this->m_window))
@@ -45,7 +45,7 @@ void Dx12Core::ApplicationDx12Base::Run()
 		this->UpdateWindowSize();
 
 		double currFrameTime = glfwGetTime();
-		double elapsedTime = currFrameTime - this->m_previousFrameTimestamp;
+		double elapsedTime = currFrameTime - this->m_frameStatistics.PreviousFrameTimestamp;
 
 		// Update Inputs
 		if (this->m_isWindowVisible)
@@ -60,7 +60,7 @@ void Dx12Core::ApplicationDx12Base::Run()
 
 
 		this->UpdateAvarageFrameTime(elapsedTime);
-		this->m_previousFrameTimestamp = currFrameTime;
+		this->m_frameStatistics.PreviousFrameTimestamp = currFrameTime;
 	}
 }
 
@@ -140,13 +140,13 @@ void Dx12Core::ApplicationDx12Base::UpdateWindowSize()
 
 void Dx12Core::ApplicationDx12Base::UpdateAvarageFrameTime(double elapsedTime)
 {
-	this->m_frameTimeSum += elapsedTime;
-	this->m_numberOfAccumulatedFrames += 1;
+	this->m_frameStatistics.FrameTimeSum += elapsedTime;
+	this->m_frameStatistics.NumberOfAccumulatedFrames += 1;
 
-	if (this->m_frameTimeSum > this->m_averageTimeUpdateInterval && this->m_numberOfAccumulatedFrames > 0)
+	if (this->m_frameStatistics.FrameTimeSum > this->m_frameStatistics.AverageTimeUpdateInterval && this->m_frameStatistics.NumberOfAccumulatedFrames > 0)
 	{
-		this->m_averageFrameTime = this->m_frameTimeSum / double(this->m_numberOfAccumulatedFrames);
-		this->m_numberOfAccumulatedFrames = 0;
-		this->m_frameTimeSum = 0.0;
+		this->m_frameStatistics.AverageFrameTime = this->m_frameStatistics.FrameTimeSum / double(this->m_frameStatistics.NumberOfAccumulatedFrames);
+		this->m_frameStatistics.NumberOfAccumulatedFrames = 0;
+		this->m_frameStatistics.FrameTimeSum = 0.0;
 	}
 }

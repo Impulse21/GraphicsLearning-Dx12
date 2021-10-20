@@ -63,6 +63,16 @@ namespace Dx12Core
 		void Shutdown();
 
 	protected:
+		struct FrameStatistics
+		{
+			double PreviousFrameTimestamp = 0.0f;
+			double AverageFrameTime = 0.0;
+			double AverageTimeUpdateInterval = 0.5;
+			double FrameTimeSum = 0.0;
+			int NumberOfAccumulatedFrames = 0;
+		};
+
+	protected:
 		virtual void LoadContent() = 0;
 		virtual void Update(double elapsedTime) = 0;
 		virtual void Render() = 0;
@@ -70,6 +80,7 @@ namespace Dx12Core
 		IGraphicsDevice* GetDevice() { return this->m_graphicsDevice; }
 		TextureResourceStore* GetTextureStore() { return this->m_textureStore.get(); }
 		GLFWwindow* GetWindow() { return this->m_window; }
+		const FrameStatistics& GetFrameStats() { return this->m_frameStatistics; }
 
 	private:
 		void CreateApplicationWindow(WindowProperties properties);
@@ -86,13 +97,7 @@ namespace Dx12Core
 		std::unique_ptr<TextureResourceStore> m_textureStore;
 
 		bool m_isWindowVisible = true;
-
-		double m_previousFrameTimestamp = 0.0f;
-		double m_averageFrameTime = 0.0;
-		double m_averageTimeUpdateInterval = 0.5;
-		double m_frameTimeSum = 0.0;
-		int m_numberOfAccumulatedFrames = 0;
-
+		FrameStatistics m_frameStatistics = {};
 		uint32_t m_frameIndex = 0;
 	};
 }
