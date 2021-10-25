@@ -25,7 +25,8 @@ set(shader_source_ps
 set(shader_headers
     Src/Defines.hlsli
     Src/BindlessExample.hlsli
-    Src/BRDFFunctions.hlsli)
+    Src/BRDFFunctions.hlsli
+    Src/Common.hlsli)
 
 
 set(shader_source_includes

@@ -18,6 +18,322 @@
 using namespace Dx12Core;
 using namespace DirectX;
 
+
+class Camera
+{
+public:
+	Camera() = default;
+
+	void Update()
+	{
+		this->CalculateViewProjMatrix();
+	}
+
+	void SetLookAt(XMVECTOR const& eye, XMVECTOR const& target, XMVECTOR const& up)
+	{
+		this->m_position = eye;
+		this->m_forward = XMVectorSubtract(target, eye);
+		this->m_up = up;
+
+		assert(XMVectorGetX(XMVector3Dot(target, up)) == 0.0f);
+
+		this->CalculateViewMatrixLH(
+			this->m_position,
+			this->m_forward,
+			this->m_up);
+	}
+
+	void InitialzeProjectMatrix(float fovDegrees, float aspectRatio, float nearZ = 0.1f, float farZ = 100.f)
+	{
+		XMStoreFloat4x4(
+			&this->m_projMatrix,
+			XMMatrixPerspectiveFovLH(XMConvertToRadians(fovDegrees), aspectRatio, nearZ, farZ));
+	}
+
+	void Translate(XMVECTOR const& translation)
+	{
+		this->m_position = XMVectorAdd(this->m_position, translation);
+
+		this->m_viewMatrix.r[4] = XMVectorSelect(g_XMIdentityR3.v, this->m_position, g_XMSelect1110);
+	}
+
+	void Translate(float pitchRad, float yawRad, float rollRad = 0.0f)
+	{
+		// I assume the values are already converted to radians.
+		if (0)
+		{
+			float cosPitch = cos(pitchRad);
+			float sinPitch = sin(pitchRad);
+			float cosYaw = cos(yawRad);
+			float sinYaw = sin(yawRad);
+
+			XMVECTOR xAxis = { cosYaw, 0, -sinYaw };
+			XMVECTOR yAxis = { sinYaw * sinPitch, cosPitch, cosYaw * sinPitch };
+			XMVECTOR zAxis = { sinYaw * cosPitch, -sinPitch, cosPitch * cosYaw };
+
+			this->m_viewMatrix = this->ConstructViewMatrixLH(xAxis, yAxis, zAxis, this->m_position);
+		}
+		else
+		{
+			XMMATRIX rot = XMMatrixRotationRollPitchYaw(pitchRad, yawRad, rollRad);
+			// Let's take the inverse of the rotation matrix and apply it to the view
+			// Since this is purely a rotation matrix we can just take the transpose of the matrix
+			rot = XMMatrixTranspose(rot);
+			this->m_viewMatrix = this->ConstructViewMatrixLH(rot.r[0], rot.r[1], rot.r[2], this->m_position);
+		}
+	}
+
+	void Translate(XMMATRIX const& worldRotation)
+	{
+		// Since the view matrix is the inverse the camera's world position.
+		// Let's take the inverse of the rotation matrix and apply it to the view
+		// Since this is purely a rotation matrix we can just take the transpose of the matrix
+		XMMATRIX viewRot = XMMatrixTranspose(worldRotation);
+		this->m_viewMatrix = this->ConstructViewMatrixLH(viewRot.r[0], viewRot.r[1], viewRot.r[2], this->m_position);
+	}
+
+	void SetTransformLH(XMMATRIX const& worldTransform)
+	{
+
+	}
+
+	const XMFLOAT4X4& GetViewMatrix()
+	{ 
+		XMFLOAT4X4 retVal;
+		XMStoreFloat4x4(&retVal, this->m_viewMatrix);
+		return retVal;
+	}
+
+	const XMFLOAT4X4& GetProjMatrix()
+	{
+		return this->m_projMatrix;
+	}
+
+	const XMFLOAT4X4& GetViewProjMatrix()
+	{
+		return this->m_viewProjMatrix;
+	}
+
+	const XMFLOAT3& GetPosition() const 
+	{
+		XMFLOAT3 retVal = {};
+		XMStoreFloat3(&retVal, this->m_position);
+
+		return retVal;
+	}
+
+private:
+
+	void SetLookDirectionLH(XMVECTOR const& ForwardVector, XMVECTOR const& upVector)
+	{
+
+	}
+
+	void CalculateViewMatrixLH(XMVECTOR const& eye, XMVECTOR const& forward, XMVECTOR const& up)
+	{
+		// R2 is forward
+		const XMVECTOR axisZ = XMVector3Normalize(forward);
+		this->m_forward = axisZ;
+
+		// r0 - Right;
+		const XMVECTOR axisX = XMVector3Normalize(XMVector3Cross(up, forward));
+
+		// R1 is up ( forward cross with right)
+		const XMVECTOR axisY = XMVector3Cross(axisZ, axisX);
+
+		this->m_viewMatrix = this->ConstructViewMatrixLH(
+			axisX,
+			axisY,
+			axisZ,
+			eye);
+	}
+
+	XMMATRIX ConstructViewMatrixLH(XMVECTOR const& axisX, XMVECTOR const& axisY, XMVECTOR const& axisZ, XMVECTOR const& position) const
+	{
+		const XMVECTOR negEye = XMVectorNegate(position);
+
+		// Not sure I get this bit.
+		const XMVECTOR d0 = XMVector3Dot(axisX, negEye);
+		const XMVECTOR d1 = XMVector3Dot(axisY, negEye);
+		const XMVECTOR d2 = XMVector3Dot(axisZ, negEye);
+
+		// Construct column major view matrix;
+		XMMATRIX m;
+		m.r[0] = XMVectorSelect(d0, axisX, g_XMSelect1110.v);
+		m.r[1] = XMVectorSelect(d1, axisY, g_XMSelect1110.v);
+		m.r[2] = XMVectorSelect(d2, axisZ, g_XMSelect1110.v);
+		m.r[3] = g_XMIdentityR3.v;
+
+		return XMMatrixTranspose(m);
+	}
+
+	void CalculateViewProjMatrix()
+	{
+		auto proj = XMLoadFloat4x4(&this->m_projMatrix);
+
+		XMStoreFloat4x4(&this->m_viewProjMatrix, XMMatrixTranspose(this->m_viewMatrix * proj));
+	}
+
+private:
+	const XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+	const XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+
+	XMMATRIX m_viewMatrix;
+	XMFLOAT4X4 m_projMatrix;
+	XMFLOAT4X4 m_viewProjMatrix;
+
+	XMVECTOR m_position;
+	XMVECTOR m_forward;
+	XMVECTOR m_up;
+};
+
+class ICameraController
+{
+public:
+	~ICameraController() = default;
+
+	virtual void Update(double elapsedTime) = 0;
+
+	virtual void EnableDebugWindow(bool enabled) = 0;
+};
+
+class ImguiCameraController : public ICameraController
+{
+public:
+	ImguiCameraController(Camera& camera)
+		: m_camera(camera)
+	{
+	}
+
+	void Update(double elapsedTime) override
+	{
+		static bool showWindow = true;
+		ImGui::Begin("Camera Controls", &showWindow, ImGuiWindowFlags_AlwaysAutoResize);
+
+		ImGui::DragFloat("Pitch", &this->m_pitch, 1.0f, -90.0f, 90.0f);
+		ImGui::DragFloat("Yaw", &this->m_yaw, 1.0f, 0.0f, 360.0f);
+
+		this->m_currentPitch = XMConvertToRadians(this->m_pitch);
+		this->m_currentHeading = XMConvertToRadians(this->m_yaw);
+
+		this->m_camera.Translate(this->m_currentPitch, this->m_currentHeading);
+
+		ImGui::End();
+
+		m_camera.Update();
+	}
+
+	// No-op
+	void EnableDebugWindow(bool enabled) {};
+private:
+	XMVECTOR m_worldNorth;
+	XMVECTOR m_worldEast;
+	XMVECTOR m_worldUp;
+
+	Camera& m_camera;
+
+	float m_pitch = 0.0f;
+	float m_yaw = 0.0f;
+
+	float m_currentHeading = 0.0f;
+	float m_currentPitch = 0.0f;
+};
+
+class DebugCameraController : public ICameraController
+{
+public:
+	DebugCameraController(Camera& camera)
+		: m_camera(camera)
+	{}
+
+	void Update(double elapsedTime)
+	{
+		GLFWgamepadstate state;
+
+		if (!glfwGetGamepadState(this->m_joystickId, &state))
+		{
+			return;
+		}
+
+
+		this->m_pitch += this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_RIGHT_Y) * this->m_lookSpeed;
+		this->m_yaw -= this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_RIGHT_X) * this->m_lookSpeed;
+
+		// Max out pitich
+		this->m_pitch = XMMin(XM_PIDIV2, this->m_pitch);
+		this->m_pitch = XMMax(-XM_PIDIV2, this->m_pitch);
+
+		if (this->m_yaw > XM_PI)
+		{
+			this->m_yaw -= XM_2PI;
+		}
+		else if (this->m_yaw <= -XM_PI)
+		{
+			this->m_yaw += XM_2PI;
+		}
+
+		this->m_camera.Translate(this->m_pitch, this->m_yaw);
+
+		float forwardTranslation = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_Y) * this->m_movementSpeed;
+		float strafe = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_X) * this->m_strafeMovementSpeed;
+
+		// Calculate new Position
+		this->m_camera.Update();
+
+		this->ShowDebugWindow();
+
+	}
+
+	void EnableDebugWindow(bool enabled) { this->m_enableDebugWindow = enabled; }
+
+private:
+	float GetAxisInput(GLFWgamepadstate const& state,  int inputId)
+	{
+		auto value = state.axes[inputId];
+		return value > this->DeadZone || value < -this->DeadZone
+			? value
+			: 0.0f;
+	}
+
+	void ShowDebugWindow()
+	{
+		ImGui::Begin("Camera Info", &this->m_enableDebugWindow, ImGuiWindowFlags_AlwaysAutoResize);
+		ImGui::Text("Controller Type:  Debug Camera");
+		ImGui::Text("Pitch %f (Degrees)", XMConvertToDegrees(this->m_pitch));
+		ImGui::Text("Yaw %f (Degrees)", XMConvertToDegrees(this->m_yaw));
+		ImGui::NewLine();
+
+		ImGui::DragFloat("Movement Speed", &this->m_movementSpeed, 0.001f, 0.001f, 1.0f);
+		ImGui::DragFloat("Strafe Speed", &this->m_strafeMovementSpeed, 0.001f, 0.001f, 1.0f);
+		ImGui::DragFloat("Look Speed", &this->m_lookSpeed, 0.001f, 0.001f, 1.0f);
+
+		ImGui::End();
+	}
+
+private:
+	const int m_joystickId = GLFW_JOYSTICK_1;
+	const float DeadZone = 0.05f;
+
+	float m_movementSpeed = 0.5f;
+	float m_strafeMovementSpeed = 0.2f;
+	float m_lookSpeed = 0.01f;
+
+	float m_pitch = 0.0f;
+	float m_yaw = 0.0f;
+	Camera& m_camera;
+
+	bool m_enableDebugWindow = false;
+};
+
+namespace CameraControllerFactory
+{
+	std::unique_ptr<ICameraController> Create(Camera& camera)
+	{
+		// return std::make_unique<ImguiCameraController>(camera);
+		return std::make_unique<DebugCameraController>(camera);
+	}
+}
+
 struct Vertex
 {
 	XMFLOAT3 Positon;
@@ -84,7 +400,7 @@ struct EnvInfo
 
 struct Material
 {
-	XMFLOAT3 Albedo = {0.0f ,0.0f, 0.0f};
+	XMFLOAT3 Albedo = { 0.0f ,0.0f, 0.0f };
 	float Metallic = 0.4f;
 	float Roughness = 0.1f;
 	float Ao = 0.3f;
@@ -210,9 +526,11 @@ private:
 
 	std::vector<EnvInfo> m_enviroments;
 
-	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, -1.0f};
+	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, -1.0f };
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 
+	Camera m_camera;
+	std::unique_ptr<ICameraController> m_cameraController;
 
 	const XMVECTOR m_focusPoint = XMVectorSet(0, 0, 0, 1);
 	const XMVECTOR m_upDirection = XMVectorSet(0, 1, 0, 0);
@@ -259,11 +577,16 @@ CREATE_APPLICATION(PbrDemo)
 void PbrDemo::LoadContent()
 {
 	{
-		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
+		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraFar, this->m_focusPoint, this->m_upDirection);
 
-		float aspectRatio = 
+		float aspectRatio =
 			this->GetDevice()->GetCurrentSwapChainDesc().Width / static_cast<float>(this->GetDevice()->GetCurrentSwapChainDesc().Height);
 		this->m_porjMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), aspectRatio, 0.1f, 100.0f);
+
+		this->m_camera.SetLookAt(this->m_cameraFar, this->m_focusPoint, this->m_upDirection);
+		this->m_camera.InitialzeProjectMatrix(45.0f, aspectRatio);
+		this->m_cameraController = CameraControllerFactory::Create(this->m_camera);
+		this->m_cameraController->EnableDebugWindow(true);
 	}
 
 	{
@@ -323,7 +646,7 @@ void PbrDemo::LoadContent()
 	}
 
 	// Construct instance data
-	std::vector<InstanceInfo> gridInstanceBufferData((SphereGridMaxRows* SphereGridMaxColumns));
+	std::vector<InstanceInfo> gridInstanceBufferData((SphereGridMaxRows * SphereGridMaxColumns));
 	const XMMATRIX rotationMatrix = XMMatrixIdentity();
 	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 	{
@@ -470,7 +793,7 @@ void PbrDemo::Update(double elapsedTime)
 			ImGui::TextWrapped("Roughtness increases by Coloumn Left(0.0f) ---> Right(1.0f)");
 			ImGui::TextWrapped("Mettalic increates by row Top(0.0f) ---> Bottom(1.0f)");
 		}
-			break;
+		break;
 
 		case SceneType::TexturedMaterials:
 			break;
@@ -490,7 +813,7 @@ void PbrDemo::Update(double elapsedTime)
 				ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&selectedMaterial.Albedo));
 			}
 
-			if (selectedMaterial.RoughnessTexIndex== INVALID_DESCRIPTOR_INDEX)
+			if (selectedMaterial.RoughnessTexIndex == INVALID_DESCRIPTOR_INDEX)
 			{
 				ImGui::DragFloat("Roughness", &selectedMaterial.Roughness, 0.01f, 0.1f, 1.0f);
 			}
@@ -509,7 +832,7 @@ void PbrDemo::Update(double elapsedTime)
 	}
 
 	ImGui::NewLine();
-	
+
 	if (ImGui::CollapsingHeader("Directional Light Parameters"))
 	{
 		ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
@@ -528,6 +851,9 @@ void PbrDemo::Update(double elapsedTime)
 		ImGui::CheckboxFlags("BiTangent Only", &this->m_drawFlags, DrawFlags::DrawBiTangentOnly);
 	}
 	ImGui::End();
+
+
+	this->m_cameraController->Update(elapsedTime);
 }
 
 void PbrDemo::Render()
@@ -565,12 +891,15 @@ void PbrDemo::Render()
 		gfxContext.SetGraphicsState(s);
 
 		SceneInfo sceneInfo = {};
+		/*
 		this->ComputeMatrices(
 			this->m_viewMatrix,
 			this->m_porjMatrix,
 			sceneInfo.ViewProjectionMatrix);
-
-		XMStoreFloat3(&sceneInfo.CameraPosition, this->m_cameraPosition);
+		*/
+		// XMStoreFloat3(&sceneInfo.CameraPosition, this->m_cameraPosition);
+		sceneInfo.ViewProjectionMatrix = this->m_camera.GetViewProjMatrix();
+		sceneInfo.CameraPosition = this->m_camera.GetPosition();
 		sceneInfo.SunColour = this->m_sunColour;
 		sceneInfo.SunDirection = this->m_sunDirection;
 
@@ -596,7 +925,7 @@ void PbrDemo::Render()
 		drawInfo.Ao = selectedMaterial.Ao;
 		drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
 		drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
-		
+
 		drawInfo.DrawFlags = this->m_drawFlags;
 
 		if (this->m_sceneType == SceneType::SphereGrid)
@@ -683,11 +1012,14 @@ void PbrDemo::Render()
 
 		// The view matrix should only consider the camera's rotation, but not the translation.
 		// Camera position, 
+		/*
 		this->ComputeMatrices(
 			this->m_viewMatrix,
 			this->m_porjMatrix,
 			skyboxCb.ViewProjectionMatrix);
+			*/
 
+		skyboxCb.ViewProjectionMatrix = this->m_camera.GetViewProjMatrix();
 		gfxContext.BindGraphics32BitConstants<SkyboxCB>(0, skyboxCb);
 		gfxContext.DrawIndexed(this->m_skyboxMesh.Indices.size());
 
@@ -897,7 +1229,7 @@ void PbrDemo::LoadMaterial(
 	std::string const& basePath,
 	std::string const& albedoPath,
 	std::string const& bumpMapPath,
-	std::string const& roughnessPath, 
+	std::string const& roughnessPath,
 	std::string const& metallicPath,
 	std::string const& aoPath,
 	Material& outMaterial)

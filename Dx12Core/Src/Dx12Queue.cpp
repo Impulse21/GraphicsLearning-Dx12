@@ -93,12 +93,9 @@ void Dx12Queue::WaitForFence(uint64_t fenceValue)
 	{
 		std::scoped_lock _(this->m_eventMutex);
 
-		LOG_CORE_INFO("Waiting on fence");
 		this->m_fence->SetEventOnCompletion(fenceValue, this->m_fenceEvent);
 		WaitForSingleObject(this->m_fenceEvent, INFINITE);
 		this->m_lastCompletedFenceValue = fenceValue;
-
-		LOG_CORE_INFO("Waiting Finished");
 	}
 }
 
