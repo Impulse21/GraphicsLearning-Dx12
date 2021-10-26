@@ -89,9 +89,10 @@ public:
 		this->m_viewMatrix = this->ConstructViewMatrixLH(viewRot.r[0], viewRot.r[1], viewRot.r[2], this->m_position);
 	}
 
-	void SetTransformLH(XMMATRIX const& worldTransform)
+	void SetTransformLH(XMMATRIX const& worldOrientation, XMVECTOR const& translation)
 	{
-		this->CalculateViewMatrixLH(this->m_position, worldTransform.r[2], worldTransform.r[1]);
+		this->m_position = translation;
+		this->CalculateViewMatrixLH(this->m_position, worldOrientation.r[2], worldOrientation.r[1]);
 	}
 
 	const XMFLOAT4X4& GetViewMatrix()
@@ -117,6 +118,11 @@ public:
 		XMStoreFloat3(&retVal, this->m_position);
 
 		return retVal;
+	}
+
+	const XMVECTOR& GetPositionVector() const
+	{
+		return this->m_position;
 	}
 
 	const XMVECTOR& GetForwardVector() const
@@ -301,14 +307,16 @@ public:
 
 		const XMMATRIX worldBase(this->m_worldEast, this->m_worldUp, this->m_worldNorth, g_XMIdentityR3);
 		XMMATRIX orientation = worldBase * XMMatrixRotationX(this->m_pitch) * XMMatrixRotationY(this->m_yaw);
-		this->m_camera.SetTransformLH(orientation);
 
-		float forwardTranslation = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_Y) * this->m_movementSpeed;
+		float forward = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_Y) * this->m_movementSpeed;
 		float strafe = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_X) * this->m_strafeMovementSpeed;
 
-		// Calculate new Position
-		this->m_camera.Update();
+		XMVECTOR translation = XMVectorSet(strafe, 0.0f, -forward, 1.0f);
+		translation =  XMVector3TransformNormal(translation, orientation) + this->m_camera.GetPositionVector();
 
+		this->m_camera.SetTransformLH(orientation, translation);
+
+		this->m_camera.Update();
 		this->ShowDebugWindow();
 
 	}
@@ -343,8 +351,8 @@ private:
 	const int m_joystickId = GLFW_JOYSTICK_1;
 	const float DeadZone = 0.2f;
 
-	float m_movementSpeed = 0.5f;
-	float m_strafeMovementSpeed = 0.2f;
+	float m_movementSpeed = 0.3f;
+	float m_strafeMovementSpeed = 0.08f;
 	float m_lookSpeed = 0.01f;
 
 	float m_pitch = 0.0f;
