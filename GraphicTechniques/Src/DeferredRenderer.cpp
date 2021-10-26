@@ -32,15 +32,12 @@ public:
 	void SetLookAt(XMVECTOR const& eye, XMVECTOR const& target, XMVECTOR const& up)
 	{
 		this->m_position = eye;
-		this->m_forward = XMVectorSubtract(target, eye);
-		this->m_up = up;
-
 		assert(XMVectorGetX(XMVector3Dot(target, up)) == 0.0f);
 
 		this->CalculateViewMatrixLH(
 			this->m_position,
-			this->m_forward,
-			this->m_up);
+			XMVectorSubtract(target, eye),
+			up);
 	}
 
 	void InitialzeProjectMatrix(float fovDegrees, float aspectRatio, float nearZ = 0.1f, float farZ = 100.f)
@@ -94,7 +91,7 @@ public:
 
 	void SetTransformLH(XMMATRIX const& worldTransform)
 	{
-
+		this->CalculateViewMatrixLH(this->m_position, worldTransform.r[2], worldTransform.r[1]);
 	}
 
 	const XMFLOAT4X4& GetViewMatrix()
@@ -122,6 +119,21 @@ public:
 		return retVal;
 	}
 
+	const XMVECTOR& GetForwardVector() const
+	{
+		return this->m_viewMatrix.r[2];
+	}
+
+	const XMVECTOR& GetUpVector() const
+	{
+		return this->m_viewMatrix.r[1];
+	}
+
+	const XMVECTOR& GetRightVector() const
+	{
+		return this->m_viewMatrix.r[0];
+	}
+
 private:
 
 	void SetLookDirectionLH(XMVECTOR const& ForwardVector, XMVECTOR const& upVector)
@@ -131,14 +143,13 @@ private:
 
 	void CalculateViewMatrixLH(XMVECTOR const& eye, XMVECTOR const& forward, XMVECTOR const& up)
 	{
-		// R2 is forward
+		// axisZ == Forward Vector
 		const XMVECTOR axisZ = XMVector3Normalize(forward);
-		this->m_forward = axisZ;
 
-		// r0 - Right;
+		// axisX == right vector
 		const XMVECTOR axisX = XMVector3Normalize(XMVector3Cross(up, forward));
 
-		// R1 is up ( forward cross with right)
+		// Axisy == Up vector ( forward cross with right)
 		const XMVECTOR axisY = XMVector3Cross(axisZ, axisX);
 
 		this->m_viewMatrix = this->ConstructViewMatrixLH(
@@ -183,8 +194,6 @@ private:
 	XMFLOAT4X4 m_viewProjMatrix;
 
 	XMVECTOR m_position;
-	XMVECTOR m_forward;
-	XMVECTOR m_up;
 };
 
 class ICameraController
@@ -242,9 +251,27 @@ private:
 class DebugCameraController : public ICameraController
 {
 public:
-	DebugCameraController(Camera& camera)
+	DebugCameraController(Camera& camera, XMVECTOR const& worldUp)
 		: m_camera(camera)
-	{}
+	{
+		bool joystickFound = glfwJoystickPresent(this->m_joystickId);
+		assert(joystickFound);
+		if (!joystickFound)
+		{
+			LOG_ERROR("Unable to locate joystick. This is currently required by the application");
+		}
+
+		this->m_worldUp = XMVector3Normalize(worldUp);
+		this->m_worldNorth = XMVector3Normalize(XMVector3Cross(g_XMIdentityR0, this->m_worldUp));
+		this->m_worldEast = XMVector3Cross(this->m_worldUp, this->m_worldNorth);
+
+		// Construct current pitch
+		this->m_pitch = std::sin(XMVectorGetX(XMVector3Dot(this->m_worldUp, this->m_camera.GetForwardVector())));
+
+		XMVECTOR forward = XMVector3Normalize(XMVector3Cross(this->m_camera.GetRightVector(), this->m_worldUp));
+		this->m_yaw = atan2(-XMVectorGetX(XMVector3Dot(this->m_worldEast, forward)), XMVectorGetX(XMVector3Dot(this->m_worldNorth, forward)));
+
+	}
 
 	void Update(double elapsedTime)
 	{
@@ -257,7 +284,7 @@ public:
 
 
 		this->m_pitch += this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_RIGHT_Y) * this->m_lookSpeed;
-		this->m_yaw -= this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_RIGHT_X) * this->m_lookSpeed;
+		this->m_yaw += this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_RIGHT_X) * this->m_lookSpeed;
 
 		// Max out pitich
 		this->m_pitch = XMMin(XM_PIDIV2, this->m_pitch);
@@ -272,7 +299,9 @@ public:
 			this->m_yaw += XM_2PI;
 		}
 
-		this->m_camera.Translate(this->m_pitch, this->m_yaw);
+		const XMMATRIX worldBase(this->m_worldEast, this->m_worldUp, this->m_worldNorth, g_XMIdentityR3);
+		XMMATRIX orientation = worldBase * XMMatrixRotationX(this->m_pitch) * XMMatrixRotationY(this->m_yaw);
+		this->m_camera.SetTransformLH(orientation);
 
 		float forwardTranslation = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_Y) * this->m_movementSpeed;
 		float strafe = this->GetAxisInput(state, GLFW_GAMEPAD_AXIS_LEFT_X) * this->m_strafeMovementSpeed;
@@ -312,7 +341,7 @@ private:
 
 private:
 	const int m_joystickId = GLFW_JOYSTICK_1;
-	const float DeadZone = 0.05f;
+	const float DeadZone = 0.2f;
 
 	float m_movementSpeed = 0.5f;
 	float m_strafeMovementSpeed = 0.2f;
@@ -323,14 +352,18 @@ private:
 	Camera& m_camera;
 
 	bool m_enableDebugWindow = false;
+
+	XMVECTOR m_worldUp;
+	XMVECTOR m_worldNorth;
+	XMVECTOR m_worldEast;
 };
 
 namespace CameraControllerFactory
 {
-	std::unique_ptr<ICameraController> Create(Camera& camera)
+	std::unique_ptr<ICameraController> Create(Camera& camera, XMVECTOR const& worldUp)
 	{
 		// return std::make_unique<ImguiCameraController>(camera);
-		return std::make_unique<DebugCameraController>(camera);
+		return std::make_unique<DebugCameraController>(camera, worldUp);
 	}
 }
 
@@ -585,7 +618,7 @@ void PbrDemo::LoadContent()
 
 		this->m_camera.SetLookAt(this->m_cameraFar, this->m_focusPoint, this->m_upDirection);
 		this->m_camera.InitialzeProjectMatrix(45.0f, aspectRatio);
-		this->m_cameraController = CameraControllerFactory::Create(this->m_camera);
+		this->m_cameraController = CameraControllerFactory::Create(this->m_camera, this->m_upDirection);
 		this->m_cameraController->EnableDebugWindow(true);
 	}
 
