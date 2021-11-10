@@ -14,11 +14,13 @@
 #include <DirectXMath.h>
 
 #include "Dx12Core/MeshPrefabs.h"
+#include <random>
 
 using namespace Dx12Core;
 using namespace DirectX;
 
 
+#pragma region Camera Logic
 class Camera
 {
 public:
@@ -285,6 +287,7 @@ public:
 
 		if (!glfwGetGamepadState(this->m_joystickId, &state))
 		{
+			this->m_camera.Update();
 			return;
 		}
 
@@ -395,49 +398,9 @@ enum DrawFlags
 	DrawTangentOnly = 0x20,
 	DrawBiTangentOnly = 0x40,
 };
+#pragma endregion
 
-struct DrawInfo
-{
-	uint32_t InstanceIndex;
-
-	XMFLOAT3 Albedo;
-	float Metallic;
-	float Roughness;
-	float Ao;
-
-	uint32_t AlbedoTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t NormalTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t MetallicTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t RoughnessTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
-
-	uint32_t DrawFlags = 0;
-};
-
-struct InstanceInfo
-{
-	XMMATRIX WorldMatrix;
-};
-
-struct SceneInfo
-{
-	XMFLOAT4X4 ViewProjectionMatrix;
-	XMFLOAT3 CameraPosition;
-	uint32_t _padding; // I DO NOT understand why this is happening 
-	XMFLOAT3 SunDirection;
-	uint32_t _padding2;
-	XMFLOAT3 SunColour;
-	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t PreFilteredEnvMapTexIndex = INVALID_DESCRIPTOR_INDEX;
-	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
-};
-
-struct EnvInfo
-{
-	TextureHandle SkyBox;
-	TextureHandle IrradanceMap;
-	TextureHandle PrefilteredMap;
-};
+#pragma region Scene
 
 struct Material
 {
@@ -453,33 +416,77 @@ struct Material
 	uint32_t AoTexIndex = INVALID_DESCRIPTOR_INDEX;
 };
 
+struct DrawableGeometry
+{
+	BufferHandle VertexBuffer;
+	BufferHandle IndexBuffer;
+	uint32_t IndexCount = 0;
+};
+
+struct InstanceData
+{
+	XMMATRIX Transform = XMMatrixIdentity();
+};
+
+struct OmniLight
+{
+	XMFLOAT4 Position = { 0.0f, 0.0f, 0.0f, 1.0f};
+	XMFLOAT4 Colour = { 1.0f, 1.0f, 1.0f, 1.0f };
+};
+
+struct EnviromentInfo
+{
+	TextureHandle SkyBox;
+	TextureHandle IrradanceMap;
+	TextureHandle PrefilteredMap;
+};
+
+struct Scene
+{
+	DrawableGeometry SphereGeometry = {};
+	Material sphereMaterial = {};
+
+	BufferHandle SphereInstanceData;
+	uint32_t SphereInstanceCount;
+	DrawableGeometry PlaneGeometry = {};
+	Material planeMaterial = {};
+
+	std::vector<OmniLight> Lights;
+
+	EnviromentInfo Environment = {};
+	Camera MainCamera = {};
+};
+
+#pragma endregion
+
+struct SceneInfoCB
+{
+	XMFLOAT4X4 ViewProjectionMatrix;
+	XMFLOAT3 CameraPosition;
+	uint32_t IrradnaceMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t PreFilteredEnvMapTexIndex = INVALID_DESCRIPTOR_INDEX;
+	uint32_t BrdfLUT = INVALID_DESCRIPTOR_INDEX;
+	uint32_t NumLights = 0;
+};
+
+struct DrawInfoCB
+{
+	XMFLOAT4X4 WorldTransform;
+	bool IsInstanced;
+	Material Material;
+};
+
 namespace RootParameters
 {
 	enum
 	{
 		DrawInfoCB = 0,
+		LightInfoSB,
 		SceneInfoCB,
 		InstanceInfoSB,
 		Count
 	};
 }
-
-namespace SceneType
-{
-	enum
-	{
-		Sphere,
-		SphereGrid,
-		TexturedMaterials,
-		Count,
-	};
-
-	static const char* Names[] = { "Sphere", "Sphere Grid", "Textured Materials" };
-}
-
-
-
-static const char* RenderModelNames[] = { "Disabled", "Enviroment", "Irradiance", "PF Radiance" };
 
 class PbrDemo : public ApplicationDx12Base
 {
@@ -517,36 +524,30 @@ private:
 		std::string const& aoPath,
 		Material& outMaterial);
 
-	void LoadEnviroments(ICommandContext& context);
 	void LoadEnvData(
 		ICommandContext& context,
 		std::string const& basePath,
 		std::string const& skyboxPath,
 		std::string const& irradanceMapPath,
 		std::string const& prefilteredRadanceMapPath,
-		EnvInfo& outEnviroment);
+		EnviromentInfo& outEnviroment);
 
 	void CreateMainPso();
 	void CreateSkyboxData(ICommandContext& context);
 
+	void CreateGeometry(MeshData const& meshData, std::vector<Vertex> const& vertices, ICommandContext& context, DrawableGeometry& ourGeom);
 private:
+	const size_t FloorWidth = 100.0f;
+	const size_t FloorLength = 100.0f;
 	const size_t SphereGridMaxRows = 6;
 	const size_t SphereGridMaxColumns = 6;
 	const float SphereGridSpaceing = 1.2;
 
-	TextureHandle m_irradanceMap;
-	TextureHandle m_prefilteredMap;
+	Scene m_scene = {};
 	TextureHandle m_brdfLUT;
 
 	std::unique_ptr<ImGuiRenderer> m_imguiRenderer;
-	BufferHandle m_vertexbuffer;
-	BufferHandle m_indexBuffer;
 
-	BufferHandle m_gridInstanceBuffer;
-	BufferHandle m_centerMeshInstanceBuffer;
-	BufferHandle m_texturedMeshInstanceBuffer;
-
-	MeshData m_sphereMesh;
 	GraphicsPipelineHandle m_pipelineState;
 
 	struct SkyboxCB
@@ -554,61 +555,25 @@ private:
 		XMFLOAT4X4 ViewProjectionMatrix = {};
 		uint32_t skyboxTexIndex = INVALID_DESCRIPTOR_INDEX;
 	};
-
 	MeshData m_skyboxMesh;
+
 	BufferHandle m_skyboxVertexBuffer;
 	BufferHandle m_skyboxIndexBuffer;
+
 	GraphicsPipelineHandle m_skyboxPso;
 
 	TextureHandle m_depthBuffer;
 
-	XMMATRIX m_viewMatrix = XMMatrixIdentity();
-	XMMATRIX m_porjMatrix = XMMatrixIdentity();
-
-	std::vector<EnvInfo> m_enviroments;
-
 	XMFLOAT3 m_sunDirection = { 1.25, 1.0f, -1.0f };
 	XMFLOAT3 m_sunColour = { 1.0f, 1.0f, 1.0f };
 
-	Camera m_camera;
 	std::unique_ptr<ICameraController> m_cameraController;
 
-	const XMVECTOR m_focusPoint = XMVectorSet(0, 0, 0, 1);
-	const XMVECTOR m_upDirection = XMVectorSet(0, 1, 0, 0);
-	const XMVECTOR m_cameraClose = XMVectorSet(0.0f, 0.0f, -3.0f, 1.0f);
-	const XMVECTOR m_cameraMed = XMVectorSet(0.0f, 0.0f, -6.0f, 1.0f);
-	const XMVECTOR m_cameraFar = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
-	XMVECTOR m_cameraPosition = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
-
-	int m_sceneType = SceneType::SphereGrid;
-
-	struct MaterialSettings
+	struct SceneSettings
 	{
-		std::vector<const char*> MaterialNames;
-		int SelectedMaterialId = 0;
-		bool DisableIbl = false;
-
-	} m_materialSettings;
-
-	std::vector<Material> m_material;
-
-	struct EnviromentSettings
-	{
-		std::vector<const char*> EnvNames;
-		int SelectedEnvNameId = 0;
-
-		enum SkyboxRenderMode
-		{
-			Disabled,
-			Enviroment,
-			Irradiance,
-			PrefilterdRadiance,
-		};
-
-		int RenderMode = SkyboxRenderMode::Enviroment;
-	} m_enviromentSettings;
-
-	uint32_t m_drawFlags = 0;
+		int NumLights = 100;
+		uint32_t NumInstances = 3;
+	} m_sceneSettings;
 };
 
 
@@ -617,19 +582,23 @@ CREATE_APPLICATION(PbrDemo)
 
 void PbrDemo::LoadContent()
 {
+	std::random_device rd;
+	std::default_random_engine eng(rd());
+
 	{
-		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraFar, this->m_focusPoint, this->m_upDirection);
+		const XMVECTOR focusPoint = XMVectorSet(0, 0, 0, 1);
+		const XMVECTOR upDir = XMVectorSet(0, 1, 0, 0);
+		const XMVECTOR initCameraPos = XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
+
+		this->m_scene.MainCamera.SetLookAt(initCameraPos, focusPoint, upDir);
 
 		float aspectRatio =
 			this->GetDevice()->GetCurrentSwapChainDesc().Width / static_cast<float>(this->GetDevice()->GetCurrentSwapChainDesc().Height);
-		this->m_porjMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), aspectRatio, 0.1f, 100.0f);
-
-		this->m_camera.SetLookAt(this->m_cameraFar, this->m_focusPoint, this->m_upDirection);
-		this->m_camera.InitialzeProjectMatrix(45.0f, aspectRatio);
-		this->m_cameraController = CameraControllerFactory::Create(this->m_camera, this->m_upDirection);
-		this->m_cameraController->EnableDebugWindow(true);
+		this->m_scene.MainCamera.InitialzeProjectMatrix(45.0f, aspectRatio);
+		this->m_cameraController = CameraControllerFactory::Create(this->m_scene.MainCamera, upDir);
 	}
 
+	// Create Depth Buffer
 	{
 		TextureDesc desc = {};
 		desc.Format = DXGI_FORMAT_D32_FLOAT;
@@ -648,128 +617,63 @@ void PbrDemo::LoadContent()
 	this->CreateMainPso();
 
 	this->m_imguiRenderer = std::make_unique<ImGuiRenderer>();
-
 	this->m_imguiRenderer->Initialize(this->GetWindow(), this->GetDevice());
 
 	ICommandContext& copyContext = this->GetDevice()->BeginContext();
 
 	this->CreateSkyboxData(copyContext);
 
-	this->m_sphereMesh = MeshPrefabs::CreateSphere(1.0f, 16, true);
+	MeshData sphereMesh = MeshPrefabs::CreateSphere(1.0f, 16, true);
 
-	LOG_INFO("Interleaving vertex data");
-	std::vector<Vertex> vertices = this->InterleaveVertexData(this->m_sphereMesh);
+	// Create a Mesh
+	auto& geometry = this->m_scene.SphereGeometry;
+
+	std::vector<Vertex> sphereVertices = this->InterleaveVertexData(sphereMesh);
+	this->CreateGeometry(sphereMesh, sphereVertices, copyContext, geometry);
+
+	MeshData floorMesh = MeshPrefabs::CreatePlane(FloorWidth, FloorLength, true);
+	std::vector<Vertex> floorVertices = this->InterleaveVertexData(floorMesh);
+	this->CreateGeometry(floorMesh, floorVertices, copyContext, this->m_scene.PlaneGeometry);
+
+	// Construct Mesh Indices
 	{
-		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::VertexBuffer;
-		bufferDesc.DebugName = L"Vertex Buffer";
-		bufferDesc.SizeInBytes = sizeof(Vertex) * vertices.size();
-		bufferDesc.StrideInBytes = sizeof(Vertex);
+		std::vector<InstanceData> instanceData(this->m_sceneSettings.NumInstances);
 
-		this->m_vertexbuffer = this->GetDevice()->CreateBuffer(bufferDesc);
-
-		// Upload Buffer
-		copyContext.WriteBuffer<Vertex>(this->m_vertexbuffer, vertices);
-		copyContext.TransitionBarrier(this->m_vertexbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-	}
-
-	{
-		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::IndexBuffer;
-		bufferDesc.DebugName = L"Index Buffer";
-		bufferDesc.SizeInBytes = sizeof(uint16_t) * this->m_sphereMesh.Indices.size();
-		bufferDesc.StrideInBytes = sizeof(uint16_t);
-
-		this->m_indexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
-
-		copyContext.WriteBuffer<uint16_t>(this->m_indexBuffer, this->m_sphereMesh.Indices);
-		copyContext.TransitionBarrier(this->m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
-	}
-
-	// Construct instance data
-	std::vector<InstanceInfo> gridInstanceBufferData((SphereGridMaxRows * SphereGridMaxColumns));
-	const XMMATRIX rotationMatrix = XMMatrixIdentity();
-	XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
-	{
-		size_t index = 0;
-		for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
+		// Construct Instance Data
+		std::uniform_int_distribution<int> xDistr(-(FloorWidth / 2.0f), (FloorWidth / 2.0f));
+		std::uniform_int_distribution<int> zDistr(-(FloorLength / 2.0f), (FloorLength / 2.0f));
+		std::uniform_int_distribution<int> scaleDistr(0.3f, 3.0f);
+		for (int i = 0; i < this->m_sceneSettings.NumInstances; i++)
 		{
-			for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
-			{
+			auto& instance = instanceData[i];
 
-				XMMATRIX translationMatrix =
-					XMMatrixTranslation(
-						static_cast<float>(iCol - static_cast<int32_t>((SphereGridMaxColumns / 2))) * SphereGridSpaceing,
-						(static_cast<float>(iRow - static_cast<int32_t>((SphereGridMaxRows / 2))) * SphereGridSpaceing) + 0.5f,
-						0.0f);
-
-				gridInstanceBufferData[index].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
-				gridInstanceBufferData[index].WorldMatrix = XMMatrixTranspose(gridInstanceBufferData[index].WorldMatrix);
-				index++;
-			}
+			XMVECTOR scaleVec = XMVectorScale({ 1.0f, 1.0f, 1.0f }, scaleDistr(eng));
+			XMVECTOR translation = XMVectorSet(xDistr(eng), 0.0f, zDistr(eng), 1.0f);
+			instance.Transform = XMMatrixTranspose(XMMatrixAffineTransformation(scaleVec, g_XMIdentityR0, XMQuaternionIdentity(), translation));
 		}
 
 		BufferDesc bufferDesc = {};
 		bufferDesc.BindFlags = BindFlags::ShaderResource;
-		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * gridInstanceBufferData.size();
-		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
-		bufferDesc.DebugName = L"Grid Instance Buffer";
+		bufferDesc.SizeInBytes = sizeof(InstanceData) * instanceData.size();
+		bufferDesc.StrideInBytes = sizeof(InstanceData);
+		bufferDesc.DebugName = L"Sphere Instance Buffer";
 
-		this->m_gridInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
+		this->m_scene.SphereInstanceData = GetDevice()->CreateBuffer(bufferDesc);
+		this->m_scene.SphereInstanceCount = instanceData.size();
 
-		copyContext.WriteBuffer<InstanceInfo>(this->m_gridInstanceBuffer, gridInstanceBufferData);
-		copyContext.TransitionBarrier(this->m_gridInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	}
-
-	// Construct instance data
-	std::vector<InstanceInfo> centreInstanceBuffer(1);
-	{
-		centreInstanceBuffer[0].WorldMatrix = scaleMatrix * rotationMatrix * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
-		centreInstanceBuffer[0].WorldMatrix = XMMatrixTranspose(centreInstanceBuffer[0].WorldMatrix);
-
-		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::ShaderResource;
-		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * centreInstanceBuffer.size();
-		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
-		bufferDesc.DebugName = L"Centre Instance Buffer";
-
-		this->m_centerMeshInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
-
-		copyContext.WriteBuffer<InstanceInfo>(this->m_centerMeshInstanceBuffer, centreInstanceBuffer);
-		copyContext.TransitionBarrier(this->m_centerMeshInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		copyContext.WriteBuffer<InstanceData>(this->m_scene.SphereInstanceData, instanceData);
+		copyContext.TransitionBarrier(this->m_scene.SphereInstanceData, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	this->LoadMaterials(copyContext);
 
-	// Construct instance data
-	std::vector<InstanceInfo> texturedSphereInstanceBufferData(this->m_material.size());
-	{
-		for (int i = 0; i < texturedSphereInstanceBufferData.size(); i++)
-		{
-
-			XMMATRIX translationMatrix =
-				XMMatrixTranslation(
-					static_cast<float>(i - static_cast<int32_t>((texturedSphereInstanceBufferData.size() / 2))) * SphereGridSpaceing,
-					0.0f,
-					0.0f);
-
-			texturedSphereInstanceBufferData[i].WorldMatrix = scaleMatrix * rotationMatrix * translationMatrix;
-			texturedSphereInstanceBufferData[i].WorldMatrix = XMMatrixTranspose(texturedSphereInstanceBufferData[i].WorldMatrix);
-		}
-
-		BufferDesc bufferDesc = {};
-		bufferDesc.BindFlags = BindFlags::ShaderResource;
-		bufferDesc.SizeInBytes = sizeof(InstanceInfo) * texturedSphereInstanceBufferData.size();
-		bufferDesc.StrideInBytes = sizeof(InstanceInfo);
-		bufferDesc.DebugName = L"Textured Material Instance Buffer";
-
-		this->m_texturedMeshInstanceBuffer = GetDevice()->CreateBuffer(bufferDesc);
-
-		copyContext.WriteBuffer<InstanceInfo>(this->m_texturedMeshInstanceBuffer, texturedSphereInstanceBufferData);
-		copyContext.TransitionBarrier(this->m_texturedMeshInstanceBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	}
-
-	this->LoadEnviroments(copyContext);
+	this->LoadEnvData(
+		copyContext,
+		"Assets\\Textures\\\IBL\\",
+		"Milkyway\\skybox.dds",
+		"Milkyway\\irradiance_map.dds",
+		"Milkyway\\prefiltered_radiance_map.dds",
+		this->m_scene.Environment);
 
 	this->m_brdfLUT =
 		this->GetTextureStore()->Load(
@@ -786,113 +690,30 @@ void PbrDemo::Update(double elapsedTime)
 	this->m_imguiRenderer->BeginFrame();
 
 	static bool showWindow = true;
-	ImGui::Begin("Options", &showWindow, ImGuiWindowFlags_AlwaysAutoResize);
-	ImGui::Combo("Scene Type", &this->m_sceneType, SceneType::Names, IM_ARRAYSIZE(SceneType::Names));
-	ImGui::NewLine();
-
-	if (this->m_sceneType == SceneType::SphereGrid)
-	{
-		this->m_cameraPosition = this->m_cameraFar;
-	}
-	else if (this->m_sceneType == SceneType::TexturedMaterials)
-	{
-		this->m_cameraPosition = this->m_cameraMed;
-	}
-	else
-	{
-		this->m_cameraPosition = this->m_cameraClose;
-	}
-
-	this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
-
-	if (ImGui::CollapsingHeader("Enviroment Settings"))
-	{
-		ImGui::Combo("Skybox Render Mode", &this->m_enviromentSettings.RenderMode, RenderModelNames, IM_ARRAYSIZE(RenderModelNames));
-
-		if (this->m_enviromentSettings.RenderMode != EnviromentSettings::SkyboxRenderMode::Disabled)
-		{
-			ImGui::Combo(
-				"Skybox",
-				&this->m_enviromentSettings.SelectedEnvNameId,
-				this->m_enviromentSettings.EnvNames.data(),
-				this->m_enviromentSettings.EnvNames.size());
-		}
-
-	}
-	if (ImGui::CollapsingHeader("Material Settings"))
-	{
-		ImGui::Checkbox("Disable IBL", &this->m_materialSettings.DisableIbl);
-
-		switch (this->m_sceneType)
-		{
-		case SceneType::SphereGrid:
-		{
-			this->m_materialSettings.SelectedMaterialId = 0;
-			auto& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
-			ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&selectedMaterial.Albedo));
-			ImGui::DragFloat("AO", &selectedMaterial.Ao, 0.01f, 0.0f, 1.0f);
-			ImGui::TextWrapped("Roughtness increases by Coloumn Left(0.0f) ---> Right(1.0f)");
-			ImGui::TextWrapped("Mettalic increates by row Top(0.0f) ---> Bottom(1.0f)");
-		}
-		break;
-
-		case SceneType::TexturedMaterials:
-			break;
-		case SceneType::Sphere:
-		{
-
-			ImGui::Combo(
-				"Material Type",
-				&this->m_materialSettings.SelectedMaterialId,
-				this->m_materialSettings.MaterialNames.data(),
-				this->m_materialSettings.MaterialNames.size());
-
-			auto& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
-
-			if (selectedMaterial.AlbedoTexIndex == INVALID_DESCRIPTOR_INDEX)
-			{
-				ImGui::ColorEdit3("Albedo", reinterpret_cast<float*>(&selectedMaterial.Albedo));
-			}
-
-			if (selectedMaterial.RoughnessTexIndex == INVALID_DESCRIPTOR_INDEX)
-			{
-				ImGui::DragFloat("Roughness", &selectedMaterial.Roughness, 0.01f, 0.1f, 1.0f);
-			}
-
-			if (selectedMaterial.MetallicTexIndex == INVALID_DESCRIPTOR_INDEX)
-			{
-				ImGui::DragFloat("Metallic", &selectedMaterial.Metallic, 0.01f, 0.0f, 1.0f);
-			}
-
-			if (selectedMaterial.AoTexIndex == INVALID_DESCRIPTOR_INDEX)
-			{
-				ImGui::DragFloat("AO", &selectedMaterial.Ao, 0.01f, 0.0f, 1.0f);
-			}
-		}
-		}
-	}
-
-	ImGui::NewLine();
-
-	if (ImGui::CollapsingHeader("Directional Light Parameters"))
-	{
-		ImGui::DragFloat3("Direction", reinterpret_cast<float*>(&this->m_sunDirection), 0.01f, -1.0f, 1.0f);
-		ImGui::ColorEdit3("Colour", reinterpret_cast<float*>(&this->m_sunColour));
-	}
-
-	ImGui::NewLine();
-	if (ImGui::CollapsingHeader("Draw Flags"))
-	{
-		ImGui::CheckboxFlags("Alebdo Only", &this->m_drawFlags, DrawFlags::DrawAlbedoOnly);
-		ImGui::CheckboxFlags("Roughness Only", &this->m_drawFlags, DrawFlags::DrawRoughnessOnly);
-		ImGui::CheckboxFlags("Metallic Only", &this->m_drawFlags, DrawFlags::DrawMetallicOnly);
-		ImGui::CheckboxFlags("Ao Only", &this->m_drawFlags, DrawFlags::DrawAoOnly);
-		ImGui::CheckboxFlags("Normal Only", &this->m_drawFlags, DrawFlags::DrawNormalWSOnly);
-		ImGui::CheckboxFlags("Tangent Only", &this->m_drawFlags, DrawFlags::DrawTangentOnly);
-		ImGui::CheckboxFlags("BiTangent Only", &this->m_drawFlags, DrawFlags::DrawBiTangentOnly);
-	}
+	ImGui::Begin("Deffered Render Example", &showWindow, ImGuiWindowFlags_AlwaysAutoResize);
+	
+	ImGui::Text("Average Frame Time %f", this->GetFrameStats().AverageFrameTime);
+	ImGui::DragInt("Number Of Omni Lights", &this->m_sceneSettings.NumLights, 1.0f, 0, 4000);
 	ImGui::End();
 
+	if (this->m_scene.Lights.size() != this->m_sceneSettings.NumLights)
+	{
+		std::random_device rd;
+		std::default_random_engine eng(rd());
+		std::uniform_real_distribution<float> xDistr(-(FloorWidth / 2.0f), (FloorWidth / 2.0f));
+		std::uniform_real_distribution<float> yDistr(2.0f, 5.0f);
+		std::uniform_real_distribution<float> zDistr(-(FloorLength / 2.0f), (FloorLength / 2.0f));
+		std::uniform_real_distribution<float> colourDistr(0.01f, 1.0f);
+
+		this->m_scene.Lights.resize(this->m_sceneSettings.NumLights);
+
+		for (int i = 0; i < this->m_scene.Lights.size(); i++)
+		{
+			auto& light = this->m_scene.Lights[i];
+			light.Position = { xDistr(eng), yDistr(eng), zDistr(eng) , 1.0f};
+			light.Colour = { colourDistr(eng), colourDistr(eng), colourDistr(eng), 1.0f};
+		}
+	}
 
 	this->m_cameraController->Update(elapsedTime);
 }
@@ -918,8 +739,8 @@ void PbrDemo::Render()
 		ScopedMarker m = gfxContext.BeginScropedMarker("Main Render Pass");
 
 		GraphicsState s = {};
-		s.VertexBuffer = this->m_vertexbuffer;
-		s.IndexBuffer = this->m_indexBuffer;
+		s.VertexBuffer = this->m_scene.SphereGeometry.VertexBuffer;
+		s.IndexBuffer = this->m_scene.SphereGeometry.IndexBuffer;
 		s.PipelineState = this->m_pipelineState;
 		s.Viewports.push_back(Viewport(swapChainDesc.Width, swapChainDesc.Height));
 		s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
@@ -931,139 +752,37 @@ void PbrDemo::Render()
 
 		gfxContext.SetGraphicsState(s);
 
-		SceneInfo sceneInfo = {};
-		/*
-		this->ComputeMatrices(
-			this->m_viewMatrix,
-			this->m_porjMatrix,
-			sceneInfo.ViewProjectionMatrix);
-		*/
-		// XMStoreFloat3(&sceneInfo.CameraPosition, this->m_cameraPosition);
-		sceneInfo.ViewProjectionMatrix = this->m_camera.GetViewProjMatrix();
-		sceneInfo.CameraPosition = this->m_camera.GetPosition();
-		sceneInfo.SunColour = this->m_sunColour;
-		sceneInfo.SunDirection = this->m_sunDirection;
+		SceneInfoCB sceneInfo = {};
+		sceneInfo.ViewProjectionMatrix = this->m_scene.MainCamera.GetViewProjMatrix();
+		sceneInfo.CameraPosition = this->m_scene.MainCamera.GetPosition();
+		sceneInfo.NumLights = this->m_scene.Lights.size();
+		sceneInfo.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_scene.Environment.IrradanceMap);
+		sceneInfo.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(this->m_scene.Environment.PrefilteredMap);
+		sceneInfo.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
+		gfxContext.BindDynamicConstantBuffer<SceneInfoCB>(RootParameters::SceneInfoCB, sceneInfo);
 
-		if (!this->m_materialSettings.DisableIbl)
+		gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_scene.SphereInstanceData);
+		gfxContext.BindDynamicStructuredBuffer(RootParameters::LightInfoSB, this->m_scene.Lights);
+
 		{
-			auto& envInfo = this->m_enviroments[this->m_enviromentSettings.SelectedEnvNameId];
-			sceneInfo.IrradnaceMapTexIndex = this->GetDevice()->GetDescritporIndex(envInfo.IrradanceMap);
-			sceneInfo.PreFilteredEnvMapTexIndex = this->GetDevice()->GetDescritporIndex(envInfo.PrefilteredMap);
-			sceneInfo.BrdfLUT = this->GetDevice()->GetDescritporIndex(this->m_brdfLUT);
+			DrawInfoCB drawInfo = {};
+			drawInfo.IsInstanced = true;
+			drawInfo.Material = this->m_scene.sphereMaterial;
+
+			gfxContext.BindGraphics32BitConstants<DrawInfoCB>(RootParameters::DrawInfoCB, drawInfo);
+			gfxContext.DrawIndexed(this->m_scene.SphereGeometry.IndexCount, this->m_scene.SphereInstanceCount);
 		}
 
-		gfxContext.BindDynamicConstantBuffer<SceneInfo>(RootParameters::SceneInfoCB, sceneInfo);
-
-		DrawInfo drawInfo = {};
-
-		Material& selectedMaterial = this->m_material[this->m_materialSettings.SelectedMaterialId];
-		drawInfo.Albedo = selectedMaterial.Albedo;
-		drawInfo.AlbedoTexIndex = selectedMaterial.AlbedoTexIndex;
-		drawInfo.Roughness = selectedMaterial.Roughness;
-		drawInfo.RoughnessTexIndex = selectedMaterial.RoughnessTexIndex;
-		drawInfo.Metallic = selectedMaterial.Metallic;
-		drawInfo.MetallicTexIndex = selectedMaterial.MetallicTexIndex;
-		drawInfo.Ao = selectedMaterial.Ao;
-		drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
-		drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
-
-		drawInfo.DrawFlags = this->m_drawFlags;
-
-		if (this->m_sceneType == SceneType::SphereGrid)
+		// Draw Plane
 		{
-			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_gridInstanceBuffer);
-			drawInfo.InstanceIndex = 0;
-			for (int iRow = 0; iRow < SphereGridMaxRows; iRow++)
-			{
-				drawInfo.Metallic = static_cast<float>(iRow) / static_cast<float>(SphereGridMaxRows);
-				for (int iCol = 0; iCol < SphereGridMaxColumns; iCol++)
-				{
-					drawInfo.Roughness = std::clamp(static_cast<float>(iCol) / static_cast<float>(SphereGridMaxColumns), 0.05f, 1.0f);
-					gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-					gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
+			DrawInfoCB drawInfo = {};
+			drawInfo.IsInstanced = false;
+			drawInfo.Material = this->m_scene.sphereMaterial;
+			XMStoreFloat4x4(&drawInfo.WorldTransform, XMMatrixTranspose(XMMatrixIdentity()));
 
-					drawInfo.InstanceIndex++;
-				}
-			}
+			gfxContext.BindGraphics32BitConstants<DrawInfoCB>(RootParameters::DrawInfoCB, drawInfo);
+			gfxContext.DrawIndexed(this->m_scene.SphereGeometry.IndexCount, this->m_scene.SphereInstanceCount);
 		}
-		else if (this->m_sceneType == SceneType::TexturedMaterials)
-		{
-			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_texturedMeshInstanceBuffer);
-			for (int i = 0; i < this->m_material.size(); i++)
-			{
-				drawInfo.InstanceIndex = i;
-
-				Material& selectedMaterial = this->m_material[i];
-				drawInfo.Albedo = selectedMaterial.Albedo;
-				drawInfo.AlbedoTexIndex = selectedMaterial.AlbedoTexIndex;
-				drawInfo.Roughness = selectedMaterial.Roughness;
-				drawInfo.RoughnessTexIndex = selectedMaterial.RoughnessTexIndex;
-				drawInfo.Metallic = selectedMaterial.Metallic;
-				drawInfo.MetallicTexIndex = selectedMaterial.MetallicTexIndex;
-				drawInfo.Ao = selectedMaterial.Ao;
-				drawInfo.AoTexIndex = selectedMaterial.AoTexIndex;
-				drawInfo.NormalTexIndex = selectedMaterial.NormalTexIndex;
-
-				gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-				gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
-			}
-		}
-		else
-		{
-			gfxContext.BindStructuredBuffer(RootParameters::InstanceInfoSB, this->m_centerMeshInstanceBuffer);
-			drawInfo.InstanceIndex = 0;
-			gfxContext.BindGraphics32BitConstants<DrawInfo>(RootParameters::DrawInfoCB, drawInfo);
-			gfxContext.DrawIndexed(this->m_sphereMesh.Indices.size());
-		}
-	}
-
-	if (this->m_enviromentSettings.RenderMode != EnviromentSettings::SkyboxRenderMode::Disabled)
-	{
-		ScopedMarker m = gfxContext.BeginScropedMarker("Render Skybox");
-
-		GraphicsState s = {};
-		s.VertexBuffer = this->m_skyboxVertexBuffer;
-		s.IndexBuffer = this->m_skyboxIndexBuffer;
-		s.PipelineState = this->m_skyboxPso;
-		s.Viewports.push_back(Viewport(swapChainDesc.Width, swapChainDesc.Height));
-		s.ScissorRect.push_back(Rect(LONG_MAX, LONG_MAX));
-
-		// TODO: Device should return a handle rather then a week refernce so the context
-		// can track the resource.
-		s.RenderTargets.push_back(this->GetDevice()->GetCurrentBackBuffer());
-		s.DepthStencil = this->m_depthBuffer;
-		gfxContext.SetGraphicsState(s);
-
-		SkyboxCB skyboxCb = {};
-
-		auto& selectedEnv = this->m_enviroments[this->m_enviromentSettings.SelectedEnvNameId];
-
-		switch (this->m_enviromentSettings.RenderMode)
-		{
-		case  EnviromentSettings::SkyboxRenderMode::Irradiance:
-			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.IrradanceMap);
-			break;
-		case  EnviromentSettings::SkyboxRenderMode::PrefilterdRadiance:
-			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.PrefilteredMap);
-			break;
-		case  EnviromentSettings::SkyboxRenderMode::Enviroment:
-		default:
-			skyboxCb.skyboxTexIndex = this->GetDevice()->GetDescritporIndex(selectedEnv.SkyBox);
-		}
-
-		// The view matrix should only consider the camera's rotation, but not the translation.
-		// Camera position, 
-		/*
-		this->ComputeMatrices(
-			this->m_viewMatrix,
-			this->m_porjMatrix,
-			skyboxCb.ViewProjectionMatrix);
-			*/
-
-		skyboxCb.ViewProjectionMatrix = this->m_camera.GetViewProjMatrix();
-		gfxContext.BindGraphics32BitConstants<SkyboxCB>(0, skyboxCb);
-		gfxContext.DrawIndexed(this->m_skyboxMesh.Indices.size());
-
 	}
 
 	{
@@ -1101,7 +820,7 @@ std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)
 		interleavedData[i].Positon = meshData.Positions[i];
 		interleavedData[i].TexCoord = meshData.TexCoords[i];
 		interleavedData[i].Normal = meshData.Normal[i];
-		interleavedData[i].Colour = meshData.Colour[i];
+		interleavedData[i].Colour = meshData.Colour.empty() ? XMFLOAT3(0.0f, 0.0f, 0.0f) : meshData.Colour[i];
 		interleavedData[i].Tangent = meshData.Tangents[i];
 	}
 
@@ -1110,34 +829,9 @@ std::vector<Vertex> PbrDemo::InterleaveVertexData(MeshData const& meshData)
 
 void PbrDemo::LoadMaterials(ICommandContext& context)
 {
-	// Load Custom Material
-	{
-		Material& material = m_material.emplace_back();
-		material.Albedo = XMFLOAT3{ 1.0f, 0.0f, 0.0f };
-		material.Ao = 0.3f;
-		material.Metallic = 0.4f;
-		material.Roughness = 1.0f;
-
-		this->m_materialSettings.MaterialNames.emplace_back("Custom Material");
-	}
-
 	const std::string BaseDir = "Assets\\Textures\\\Materials\\";
 	{
-		Material& material = this->m_material.emplace_back();
-		this->LoadMaterial(
-			context,
-			BaseDir,
-			"rustediron2\\rustediron2_basecolor.png",
-			"rustediron2\\rustediron2_normal.png",
-			"rustediron2\\rustediron2_roughness.png",
-			"rustediron2\\rustediron2_metallic.png",
-			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("rusted iron");
-	}
-
-	{
-		Material& material = this->m_material.emplace_back();
+		Material& material = this->m_scene.sphereMaterial;
 		this->LoadMaterial(
 			context,
 			BaseDir,
@@ -1147,83 +841,19 @@ void PbrDemo::LoadMaterials(ICommandContext& context)
 			"gray-granite-flecks\\gray-granite-flecks-Metallic.png",
 			"gray-granite-flecks\\gray-granite-flecks-ao.png",
 			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("gray granite flecks");
 	}
 
 	{
-		Material& material = this->m_material.emplace_back();
+		Material& material = this->m_scene.planeMaterial;
 		this->LoadMaterial(
 			context,
 			BaseDir,
-			"modern-brick1\\modern-brick1_albedo.png",
-			"modern-brick1\\modern-brick1_normal-dx.png",
-			"modern-brick1\\modern-brick1_roughness.png",
-			"modern-brick1\\modern-brick1_metallic.png",
-			"modern-brick1\\modern-brick1_ao.png",
+			"hardwood-brown\\hardwood-brown-planks-albedo.png",
+			"hardwood-brown\\hardwood-brown-planks-normal-dx.png",
+			"hardwood-brown\\hardwood-brown-planks-roughness.png",
+			"hardwood-brown\\hardwood-brown-planks-metallic.png",
+			"hardwood-brown\\hardwood-brown-planks-ao.png",
 			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("modern bricks");
-	}
-
-	{
-		Material& material = this->m_material.emplace_back();
-		this->LoadMaterial(
-			context,
-			BaseDir,
-			"worn-shiny-metal\\worn-shiny-metal-albedo.png",
-			"worn-shiny-metal\\worn-shiny-metal-Normal-dx.png",
-			"worn-shiny-metal\\worn-shiny-metal-Roughness.png",
-			"worn-shiny-metal\\worn-shiny-metal-Metallic.png",
-			"worn-shiny-metal\\worn-shiny-metal-ao.png",
-			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("stworn shiny metal");
-	}
-
-	{
-		Material& material = this->m_material.emplace_back();
-		this->LoadMaterial(
-			context,
-			BaseDir,
-			"scuffed-plastic\\scuffed-plastic4-alb.png",
-			"scuffed-plastic\\scuffed-plastic-normal.png",
-			"scuffed-plastic\\scuffed-plastic-rough.png",
-			"scuffed-plastic\\scuffed-plastic-metal.png",
-			"scuffed-plastic\\scuffed-plastic-ao.png",
-			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("scuffed plastic");
-	}
-
-	/*
-	{
-		Material& material = this->m_material.emplace_back();
-		this->LoadMaterial(
-			context,
-			BaseDir,
-			"Grass\\grass1-albedo3.png",
-			"Grass\\grass1-normal1-dx.png",
-			"Grass\\grass1-rough.png",
-			"Grass\\worn-shiny-metal-Metallic.png",
-			"Grass\\grass1-ao.png",
-			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("grass");
-	}
-	*/
-	{
-		Material& material = this->m_material.emplace_back();
-		this->LoadMaterial(
-			context,
-			BaseDir,
-			"gold\\lightgold_albedo.png",
-			"gold\\lightgold_normal-dx.png",
-			"gold\\lightgold_roughness.png",
-			"gold\\lightgold_metallic.png",
-			material);
-
-		this->m_materialSettings.MaterialNames.emplace_back("gold");
 	}
 }
 
@@ -1293,56 +923,13 @@ void PbrDemo::LoadMaterial(
 	outMaterial.AoTexIndex = this->GetDevice()->GetDescritporIndex(ao);
 }
 
-void PbrDemo::LoadEnviroments(ICommandContext& context)
-{
-	const std::string BaseDir = "Assets\\Textures\\\IBL\\";
-	{
-		EnvInfo& envInfo = this->m_enviroments.emplace_back();
-		this->LoadEnvData(
-			context,
-			BaseDir,
-			"PaperMill_Ruins_E\\PaperMill_Skybox.dds",
-			"PaperMill_Ruins_E\\PaperMill_IrradianceMap.dds",
-			"PaperMill_Ruins_E\\PaperMill_RadianceMap.dds",
-			envInfo);
-
-		this->m_enviromentSettings.EnvNames.emplace_back("Paper Mill Ruins");
-	}
-
-	{
-		EnvInfo& envInfo = this->m_enviroments.emplace_back();
-		this->LoadEnvData(
-			context,
-			BaseDir,
-			"Serpentine_Valley\\output_skybox.dds",
-			"Serpentine_Valley\\output_irradiance.dds",
-			"Serpentine_Valley\\output_radiance.dds",
-			envInfo);
-
-		this->m_enviromentSettings.EnvNames.emplace_back("Serpentine Valley");
-	}
-
-	{
-		EnvInfo& envInfo = this->m_enviroments.emplace_back();
-		this->LoadEnvData(
-			context,
-			BaseDir,
-			"cmftStudio\\output_skybox.dds",
-			"cmftStudio\\output_irradiance.dds",
-			"cmftStudio\\output_radiance.dds",
-			envInfo);
-
-		this->m_enviromentSettings.EnvNames.emplace_back("Cmft Studio");
-	}
-}
-
 void PbrDemo::LoadEnvData(
 	ICommandContext& context,
 	std::string const& basePath,
 	std::string const& skyboxPath,
 	std::string const& irradanceMapPath,
 	std::string const& prefilteredRadanceMapPath,
-	EnvInfo& outEnviroment)
+	EnviromentInfo& outEnviroment)
 {
 	outEnviroment.SkyBox =
 		this->GetTextureStore()->Load(
@@ -1395,9 +982,10 @@ void PbrDemo::CreateMainPso()
 	bindlessParameterLayout.AddParameterSRV(102);
 
 	ShaderParameterLayout parameterLayout = {};
-	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfo) / 4);
-	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddConstantParameter<0, 0>(sizeof(DrawInfoCB) / 4);
 	parameterLayout.AddSRVParameter<0, 0>();
+	parameterLayout.AddCBVParameter<1, 0>();
+	parameterLayout.AddSRVParameter<1, 0>();
 	parameterLayout.AddStaticSampler<0, 0>(
 		D3D12_FILTER_MIN_MAG_MIP_LINEAR,
 		D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -1411,6 +999,7 @@ void PbrDemo::CreateMainPso()
 	pipelineDesc.ShaderParameters.Binding = &parameterLayout;
 	pipelineDesc.ShaderParameters.Bindless = &bindlessParameterLayout;
 	pipelineDesc.ShaderParameters.AllowInputLayout();
+
 	this->m_pipelineState = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
 
 }
@@ -1489,4 +1078,35 @@ void PbrDemo::CreateSkyboxData(ICommandContext& context)
 
 	pipelineDesc.RenderState.DepthStencilState = &depthState;
 	this->m_skyboxPso = this->GetDevice()->CreateGraphicPipeline(pipelineDesc);
+}
+
+void PbrDemo::CreateGeometry(MeshData const& meshData, std::vector<Vertex> const& vertices, ICommandContext& context, DrawableGeometry& outGeom)
+{
+	{
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::VertexBuffer;
+		bufferDesc.DebugName = L"Vertex Buffer";
+		bufferDesc.SizeInBytes = sizeof(Vertex) * vertices.size();
+		bufferDesc.StrideInBytes = sizeof(Vertex);
+
+		outGeom.VertexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
+
+		// Upload Buffer
+		context.WriteBuffer<Vertex>(outGeom.VertexBuffer, vertices);
+		context.TransitionBarrier(outGeom.VertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	}
+
+	{
+		BufferDesc bufferDesc = {};
+		bufferDesc.BindFlags = BindFlags::IndexBuffer;
+		bufferDesc.DebugName = L"Index Buffer";
+		bufferDesc.SizeInBytes = sizeof(uint16_t) * meshData.Indices.size();
+		bufferDesc.StrideInBytes = sizeof(uint16_t);
+
+		outGeom.IndexBuffer = this->GetDevice()->CreateBuffer(bufferDesc);
+
+		context.WriteBuffer<uint16_t>(outGeom.IndexBuffer, meshData.Indices);
+		context.TransitionBarrier(outGeom.IndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+		outGeom.IndexCount = meshData.Indices.size();
+	}
 }

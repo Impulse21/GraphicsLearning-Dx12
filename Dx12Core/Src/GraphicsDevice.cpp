@@ -2,6 +2,8 @@
 #include "Dx12Core/Dx12Queue.h"
 #include "Dx12DescriptorHeap.h"
 
+// #include "d3d12shader.h"
+
 using namespace Dx12Core;
 
 Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& context)
@@ -152,6 +154,14 @@ void Dx12Core::GraphicsDevice::BeginFrame()
 
 	Frame& frame = this->GetCurrentFrame();
 	this->GetGfxQueue()->WaitForFence(frame.FrameFence);
+
+	uint64_t completedFence = this->GetGfxQueue()->GetLastCompletedFence();
+
+	// Purge stale resources
+	while (!this->m_safeReleaseQueue.empty() && std::get<uint64_t>(this->m_safeReleaseQueue.front()) <= completedFence)
+	{
+		this->m_safeReleaseQueue.pop_front();
+	}
 
 	frame.ReferencedResources.clear();
 }
@@ -351,11 +361,12 @@ BufferHandle Dx12Core::GraphicsDevice::CreateBuffer(BufferDesc desc)
 
 ShaderHandle Dx12Core::GraphicsDevice::CreateShader(ShaderDesc const& desc, const void* binary, size_t binarySize)
 {
-	Shader* internal = new Shader(desc, binary, binarySize);
+	auto internal = std::make_unique<Shader>(desc, binary, binarySize);
 
-	// TODO: Shader Reflection data
+	LOG_CORE_INFO("Shader Reflection Info %s", desc.debugName.c_str());
+	this->CollectShaderParameters(binary, binarySize);
 
-	return ShaderHandle::Create(internal);
+	return ShaderHandle::Create(internal.release());
 }
 
 GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsPipelineDesc desc)
@@ -543,6 +554,28 @@ RefCountPtr<ID3D12RootSignature> Dx12Core::GraphicsDevice::CreateD3DRootSignatur
 			IID_PPV_ARGS(&dx12RootSig)));
 
 	return dx12RootSig;
+}
+
+void Dx12Core::GraphicsDevice::CollectShaderParameters(const void* binary, size_t binarySize)
+{
+	/*
+	DxcBuffer reflectionData;
+	reflectionData.Encoding = DXC_CP_ACP;
+	reflectionData.Ptr = binary;
+	reflectionData.Size = (SIZE_T)binarySize;
+
+	RefCountPtr<ID3D12ShaderReflection> reflection;
+	ThrowIfFailed(
+		this->m_context.dxcUtils->CreateReflection(&reflectionData, IID_PPV_ARGS(&reflection)));
+
+	D3D12_SHADER_DESC shaderDesc;
+	ThrowIfFailed(
+		reflection->GetDesc(&shaderDesc));
+
+	
+	LOG_CORE_INFO("\tNumber bound desources: %i", shaderDesc.BoundResources);
+	LOG_CORE_INFO("\tNumber Input Parameters: %i", shaderDesc.InputParameters);
+	*/
 }
 
 void Dx12Core::GraphicsDevice::InitializeRenderTargets()

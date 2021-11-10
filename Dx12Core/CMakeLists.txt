@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.13)
 
 # set the project name and version
 project(Dx12Core VERSION 1.0)
-
+    
 set(dx12_core_include_files
     Include/Dx12Core/Dx12Core.h
     Include/Dx12Core/Application.h
@@ -40,15 +40,31 @@ set(dx12_core_src_files
     Src/MeshPrefabs.cpp
     Src/ImGui/imgui_impl_glfw.h
     Src/ImGui/imgui_impl_glfw.cpp
-    Src/ImGui/ImguiRenderer.cpp)
+    Src/ImGui/ImguiRenderer.cpp
+    Src/DescriptorHeap.h
+    Src/DescriptorHeap.cpp)
 
 add_library(Dx12Core STATIC 
     ${dx12_core_include_files}
     ${dx12_core_src_files})
 
-target_link_libraries(Dx12Core d3d12.lib dxgi.lib dxguid.lib DirectXTex)
+target_link_libraries(
+    Dx12Core
+    d3d12.lib
+    dxgi.lib
+    dxguid.lib
+    DirectXTex)
 
-target_include_directories(Dx12Core PUBLIC Include Src ../ThirdParty/spdlog/include ../ThirdParty/glfw ../ThirdParty/DirectXTex/DirectXTex Dx12Headers ../ThirdParty/imgui ../Shaders/Include)
+target_include_directories(
+    Dx12Core PUBLIC 
+    Include 
+    Src 
+    ../ThirdParty/spdlog/include 
+    ../ThirdParty/glfw 
+    ../ThirdParty/DirectXTex/DirectXTex 
+    Dx12Headers 
+    ../ThirdParty/imgui 
+    ../Shaders/Include)
 
 
 set_property(TARGET Dx12Core PROPERTY CXX_STANDARD 17)

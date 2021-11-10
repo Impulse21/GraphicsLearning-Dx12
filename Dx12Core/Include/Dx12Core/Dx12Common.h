@@ -6,6 +6,8 @@
 #include <dxgi1_6.h>
 // #include <d3d12.h>
 
+// #include "dxcapi.h"
+
 #ifdef _DEBUG
 	#include <dxgidebug.h>
 #endif
@@ -69,7 +71,7 @@ namespace Dx12Core
         RefCountPtr<ID3D12Device> Device;
         RefCountPtr<ID3D12Device2> Device2;
         RefCountPtr<ID3D12Device5> Device5;
-
+        // RefCountPtr<IDxcUtils> dxcUtils;
         RefCountPtr<IDXGIAdapter> GpuAdapter;
 
         D3D12_FEATURE_DATA_ROOT_SIGNATURE FeatureDataRootSignature = {};

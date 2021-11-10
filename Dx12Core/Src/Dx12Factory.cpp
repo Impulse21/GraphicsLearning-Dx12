@@ -213,6 +213,10 @@ Dx12Context Dx12Core::Dx12Factory::CreateContext()
 		}
 	}
 
+	// Create Compiler
+	// ThrowIfFailed(
+		// DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&context.dxcUtils)));
+
 	context.Factory = this->CreateFactory();
 	return context;
 }

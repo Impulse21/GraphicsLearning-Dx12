@@ -7,9 +7,14 @@
 #include "Dx12Core.h"
 #include "Dx12Common.h"
 #include "ResouceIdOwner.h"
+
+// -- depericated ---
 #include "Dx12DescriptorHeap.h"
+#include "DescriptorHeap.h"
 
 #include "Dx12CommandContext.h"
+
+#include "Dx12Core/Dx12Queue.h"
 
 #define MAX_COMMAND_CONTEXT 30 // According to Nvida, this is good.
 
@@ -24,7 +29,64 @@ namespace Dx12Core
 		Count
 	};
 
-	class Dx12Queue;
+	class StaleResourceWrapper
+	{
+	public:
+		class IStaleResource;
+
+		template<typename ResourceType>
+		static StaleResourceWrapper Create(ResourceType&& type)
+		{
+			class SpecificStaleResource : public IStaleResource
+			{
+			public:
+				SpecificStaleResource(ResourceType&& resource)
+					: m_resource(std::move(resource))
+				{}
+
+				SpecificStaleResource(const SpecificStaleResource&) = delete;
+				SpecificStaleResource(SpecificStaleResource&&) = delete;
+				SpecificStaleResource& operator = (const SpecificStaleResource&) = delete;
+				SpecificStaleResource& operator = (SpecificStaleResource&&) = delete;
+
+			private:
+				ResourceType m_resource;
+			};
+
+			return StaleResourceWrapper(std::make_shared<SpecificStaleResource>(std::move(type)));
+		}
+
+		StaleResourceWrapper(std::shared_ptr<IStaleResource> staleResource)
+			: m_staleResource(staleResource)
+		{}
+
+		StaleResourceWrapper(StaleResourceWrapper&& other) noexcept 
+			: m_staleResource(std::move(other.m_staleResource))
+		{
+			other.m_staleResource = nullptr;
+		}
+
+		StaleResourceWrapper(const StaleResourceWrapper& other) noexcept 
+			: m_staleResource(other.m_staleResource)
+		{
+		}
+
+		// clang-format off
+		StaleResourceWrapper& operator = (const StaleResourceWrapper&) = delete;
+		StaleResourceWrapper& operator = (StaleResourceWrapper&&) = delete;
+		// clang-format on
+
+	private:
+		class IStaleResource
+		{
+		public:
+			virtual ~IStaleResource() = default;
+		};
+
+	private:
+		std::shared_ptr<IStaleResource> m_staleResource;
+	};
+
 	class GraphicsDevice : public RefCounter<IGraphicsDevice>
 	{
 	public:
@@ -60,10 +122,21 @@ namespace Dx12Core
 		TextureHandle GetBackBuffer(uint32_t index) override { return this->m_swapChainTextures[index]; };
 		uint32_t GetCurrentBackBufferIndex() { assert(this->m_swapChain); return this->m_swapChain->GetCurrentBackBufferIndex(); }
 
+		template<typename ResourceType>
+		void SafeReleaseObject(ResourceType&& resource)
+		{
+			auto staleWrapper = StaleResourceWrapper::Create(std::move(resource));
+
+			// I will need to update this to support other queues but for now, not a big deal as I only support graphics queue
+			auto fenceValue = this->GetGfxQueue()->GetLastCompletedFence() + 1L;
+			this->m_safeReleaseQueue.emplace_back(std::make_tuple(fenceValue, staleWrapper));
+		};
+
 	public:
 		Dx12Queue* GetGfxQueue() { return this->m_queues[static_cast<size_t>(CommandQueue::Graphics)].get(); }
 
 		const Dx12Context& GetDx12Context() const { return this->m_context; }
+		ID3D12Device2* GetDx12Device2() const { return this->m_context.Device2.Get(); }
 
 	private:
 		RootSignatureHandle CreateRootSignature(RootSignatureDesc& desc);
@@ -72,6 +145,8 @@ namespace Dx12Core
 			ShaderParameterLayout* shaderParameter,
 			BindlessShaderParameterLayout* bindlessLayout);
 		RefCountPtr<ID3D12RootSignature> CreateD3DRootSignature(D3D12_ROOT_SIGNATURE_DESC1&& rootSigDesc);
+
+		void CollectShaderParameters(const void* binary, size_t binarySize);
 
 	private:
 		struct Frame
@@ -93,6 +168,9 @@ namespace Dx12Core
 		std::unique_ptr<StaticDescriptorHeap> m_shaderResourceViewHeap;
 		std::unique_ptr<StaticDescriptorHeap> m_samplerHeap;
 
+		std::vector<std::unique_ptr<CpuDescriptorHeap>> m_cpuDescriptorHeaps;
+		std::vector<std::unique_ptr<GpuDescriptorHeap>> m_gpuDescritporHeaps;
+
 		SwapChainDesc m_swapChainDesc;
 
 		RefCountPtr<IDXGISwapChain4> m_swapChain;
@@ -107,8 +185,9 @@ namespace Dx12Core
 		std::vector<TextureHandle> m_swapChainTextures;
 
 		std::vector<ID3D12CommandList*> m_commandListsToExecute; // used to avoid re-allocations;
-
 		std::mutex m_commandListMutex;
+
+		std::deque<std::tuple<uint64_t, StaleResourceWrapper>> m_safeReleaseQueue;
 	};
 }
 

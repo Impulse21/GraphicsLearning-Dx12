@@ -23,6 +23,7 @@ namespace Dx12Core
 		const ShaderDesc& GetDesc() const { return this->m_desc; }
 		const std::vector<uint8_t>& GetByteCode() const { return this->m_byteCode; }
 
+
 	private:
 		std::vector<uint8_t> m_byteCode;
 		const ShaderDesc m_desc;

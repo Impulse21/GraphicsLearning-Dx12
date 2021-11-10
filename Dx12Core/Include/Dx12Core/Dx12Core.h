@@ -118,13 +118,13 @@ namespace Dx12Core
 
     enum class BindFlags : uint32_t
     {
-        None = 0,
-        VertexBuffer = 0x00000001,
-        IndexBuffer = 0x00000002,
-        ConstantBuffer = 0x00000004,
-        ShaderResource = 0x00000008,
-        RenderTarget = 0x00000010,
-        DepthStencil = 0x00000020,
+        None            = 0,
+        VertexBuffer    = 0x00000001,
+        IndexBuffer     = 0x00000002,
+        ConstantBuffer  = 0x00000004,
+        ShaderResource  = 0x00000008,
+        RenderTarget    = 0x00000010,
+        DepthStencil    = 0x00000020,
         UnorderedAccess = 0x00000040,
     };
 
@@ -252,6 +252,114 @@ namespace Dx12Core
             : Type(type)
             , RegisterSpace(registerSpace)
         {
+        }
+    };
+
+    struct ShaderResourceVariable
+    {
+        ShaderType ShaderStages = ShaderType::All;
+        std::string Name = "";
+        uint32_t ShaderRegister = 0;
+        uint32_t ShaderSpace = 0;
+
+        D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE;
+
+        bool IsBindless = false;
+        uint32_t MaxSize = 1;
+
+        bool IsPushConstant = false;
+        uint32_t Num32BitConstants = 0;
+
+        BindFlags Binding = BindFlags::None;
+
+        static ShaderResourceVariable CreateTextureSrv(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+            retVal.Binding = BindFlags::ShaderResource;
+            return retVal;
+        }
+
+        static ShaderResourceVariable CreateBindlessSrv(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace,
+            uint32_t maxSize)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+            retVal.Binding = BindFlags::ShaderResource;
+            retVal.IsBindless = true;
+            retVal.MaxSize = maxSize; // maybe not?
+            return retVal;
+        }
+
+        static ShaderResourceVariable CreatePushConstant(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+
+            return retVal;
+        }
+
+        static ShaderResourceVariable CreateSrv(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+
+            return retVal;
+        }
+
+        static ShaderResourceVariable CreateCbv(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+
+            return retVal;
+        }
+
+        static ShaderResourceVariable CreateStaticSampler(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace,
+            D3D12_FILTER			   filter,
+            D3D12_TEXTURE_ADDRESS_MODE addressUVW,
+            UINT					   maxAnisotropy = 16,
+            D3D12_COMPARISON_FUNC	   comparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+            D3D12_STATIC_BORDER_COLOR  borderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE)
+        {
+            auto retVal = Create(shaderStages, name, shaderRegister, shaderSpace);
+
+            return retVal;
+        }
+
+    private:
+        static ShaderResourceVariable Create(
+            ShaderType shaderStages,
+            std::string const& name,
+            uint32_t shaderRegister,
+            uint32_t shaderSpace)
+        {
+            ShaderResourceVariable retVal = {};
+            retVal.ShaderRegister = shaderRegister;
+            retVal.Name = name;
+            retVal.ShaderRegister = shaderRegister;
+            retVal.ShaderSpace = shaderSpace;
+
+            return retVal;
         }
     };
 
