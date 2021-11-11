@@ -258,6 +258,7 @@ CREATE_APPLICATION(PbrDemo)
 
 void PbrDemo::LoadContent()
 {
+	LOG_INFO("Hello?");
 	{
 		this->m_viewMatrix = XMMatrixLookAtLH(this->m_cameraPosition, this->m_focusPoint, this->m_upDirection);
 

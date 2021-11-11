@@ -4,7 +4,7 @@
 
 #include <optional>
 #include "Dx12DescriptorHeap.h"
-
+#include "DescriptorHeap.h"
 
 // helper function for texture subresource calculations
 // https://msdn.microsoft.com/en-us/library/windows/desktop/dn705766(v=vs.85).aspx
@@ -80,6 +80,20 @@ void Dx12Core::Dx12CommandContext::BindHeaps(std::array<StaticDescriptorHeap*, 2
 			}
 
 			heaps.push_back(heap->GetNative());
+		}
+	}
+
+	this->m_internalList->SetDescriptorHeaps(heaps.size(), heaps.data());
+}
+
+void Dx12Core::Dx12CommandContext::BindHeaps(std::array<GpuDescriptorHeap*, 2> const& shaderHeaps)
+{
+	std::vector<ID3D12DescriptorHeap*> heaps;
+	for (auto* heap : shaderHeaps)
+	{
+		if (heap)
+		{
+			heaps.push_back(heap->GetNativeHeap());
 		}
 	}
 

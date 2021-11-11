@@ -29,6 +29,15 @@ namespace Dx12Core
 		Count
 	};
 
+	enum DescritporHeapType
+	{
+		Srv_Cbv_Uav = 0,
+		Sampler,
+		Rtv,
+		Dsv,
+		NumTypes
+	};
+
 	class StaleResourceWrapper
 	{
 	public:
@@ -138,6 +147,21 @@ namespace Dx12Core
 		const Dx12Context& GetDx12Context() const { return this->m_context; }
 		ID3D12Device2* GetDx12Device2() const { return this->m_context.Device2.Get(); }
 
+		CpuDescriptorHeap* GetCpuHeap(DescritporHeapType type)
+		{
+			return this->m_cpuDescriptorHeaps[type].get();
+		}
+		
+		GpuDescriptorHeap* GetGpuResourceHeap()
+		{
+			return this->m_gpuDescritporHeaps[Srv_Cbv_Uav].get();
+		}
+
+		GpuDescriptorHeap* GetGpuSamplerHeap()
+		{
+			return this->m_gpuDescritporHeaps[Sampler].get();
+		}
+
 	private:
 		RootSignatureHandle CreateRootSignature(RootSignatureDesc& desc);
 		RootSignatureHandle CreateRootSignature(
@@ -163,13 +187,8 @@ namespace Dx12Core
 		Dx12Context m_context;
 		const GraphicsDeviceDesc m_desc;
 
-		std::unique_ptr<StaticDescriptorHeap> m_renderTargetViewHeap;
-		std::unique_ptr<StaticDescriptorHeap> m_depthStencilViewHeap;
-		std::unique_ptr<StaticDescriptorHeap> m_shaderResourceViewHeap;
-		std::unique_ptr<StaticDescriptorHeap> m_samplerHeap;
-
-		std::vector<std::unique_ptr<CpuDescriptorHeap>> m_cpuDescriptorHeaps;
-		std::vector<std::unique_ptr<GpuDescriptorHeap>> m_gpuDescritporHeaps;
+		std::array<std::unique_ptr<CpuDescriptorHeap>, DescritporHeapType::NumTypes> m_cpuDescriptorHeaps;
+		std::array<std::unique_ptr<GpuDescriptorHeap>, 2> m_gpuDescritporHeaps;
 
 		SwapChainDesc m_swapChainDesc;
 

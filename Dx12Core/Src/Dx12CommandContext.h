@@ -18,6 +18,7 @@ namespace Dx12Core
 	};
 
 	class StaticDescriptorHeap;
+	class GpuDescriptorHeap;
 	class Dx12CommandContext : public RefCounter<ICommandContext>
 	{
 	public:
@@ -33,6 +34,7 @@ namespace Dx12Core
 		ID3D12GraphicsCommandList* GetInternal() { return this->m_internalList; }
 
 		void BindHeaps(std::array<StaticDescriptorHeap*, 2> const& shaderHeaps);
+		void BindHeaps(std::array<GpuDescriptorHeap*, 2> const& shaderHeaps);
 
 		// -- Wrapped Commands ---
 	public:

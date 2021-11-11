@@ -268,7 +268,9 @@ namespace Dx12Core
 	public:
 		DescriptorHeapAllocation Allocate(uint32_t numDescriptors) override;
 		void Free(DescriptorHeapAllocation&& allocation) override;
+
 		uint32_t GetDescriptorSize() const override { return this->m_descriptorSize; }
+		ID3D12DescriptorHeap* GetNativeHeap() { return this->m_d3dHeap; }
 
 		DescriptorHeapAllocation AllocateDynamic(uint32_t numDescriptors);
 

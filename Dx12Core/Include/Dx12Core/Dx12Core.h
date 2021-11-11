@@ -772,8 +772,12 @@ namespace Dx12Core
 
         uint32_t RenderTargetViewHeapSize = 1024;
         uint32_t DepthStencilViewHeapSize = 1024;
-        uint32_t ShaderResourceViewHeapSize = 16384;
-        uint32_t SamplerHeapSize = 1024;
+        uint32_t ShaderResourceViewCpuHeapSize = 1024;
+        uint32_t ShaderResourceViewGpuStaticHeapSize = 16384;
+        uint32_t ShaderResourceViewGpuDynamicHeapSize = 16384;
+        uint32_t SamplerHeapCpuSize = 1024;
+        uint32_t SamplerHeapGpuSize = 1024;
+
     };
 
     struct SwapChainDesc

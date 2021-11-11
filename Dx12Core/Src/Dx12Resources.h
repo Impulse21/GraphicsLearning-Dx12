@@ -3,7 +3,7 @@
 #include "Dx12Core/Dx12Core.h"
 #include "Dx12Core/Dx12Common.h"
 
-#include "DescriptorAllocation.h"
+#include "DescriptorHeap.h"
 
 namespace Dx12Core
 {
@@ -73,7 +73,8 @@ namespace Dx12Core
 
 		RefCountPtr<ID3D12Resource> D3DResource;
 
-		DescriptorAllocation Srv = {};
+		DescriptorHeapAllocation Srv = {};
+		DescriptorIndex ResourceIndex = INVALID_DESCRIPTOR_INDEX;
 
 		D3D12_VERTEX_BUFFER_VIEW VertexView = {};
 		D3D12_INDEX_BUFFER_VIEW IndexView = {};
@@ -94,9 +95,10 @@ namespace Dx12Core
 		~Texture() = default;
 
 		RefCountPtr<ID3D12Resource> D3DResource = nullptr;
-		DescriptorAllocation Rtv = {};
-		DescriptorAllocation Dsv = {};
-		DescriptorAllocation Srv = {};
+		DescriptorHeapAllocation Rtv = {};
+		DescriptorHeapAllocation Dsv = {};
+		DescriptorHeapAllocation Srv = {};
+		DescriptorIndex ResourceIndex = INVALID_DESCRIPTOR_INDEX;
 
 		GraphicsDevice* Device;
 

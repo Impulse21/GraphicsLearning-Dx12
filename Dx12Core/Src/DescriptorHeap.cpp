@@ -201,12 +201,12 @@ DescriptorHeapAllocation Dx12Core::DescriptorHeapAllocationPage::Allocate(uint32
 
 	this->m_numFreeHandles -= numDescriptors;
 	D3D12_CPU_DESCRIPTOR_HANDLE  cpuHandle = this->m_baseCpuDescritpor;
-	this->m_baseCpuDescritpor.ptr += offset * this->m_descritporSize;
+	cpuHandle.ptr += offset * this->m_descritporSize;
 
 	D3D12_GPU_DESCRIPTOR_HANDLE  gpuHandle = this->m_baseGpuDescritpor;
 	if (this->m_heapDesc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE)
 	{
-		this->m_baseGpuDescritpor.ptr += offset * this->m_descritporSize;
+		gpuHandle.ptr += offset * this->m_descritporSize;
 	}
 
 	return DescriptorHeapAllocation(

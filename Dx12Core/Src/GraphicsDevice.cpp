@@ -25,24 +25,46 @@ Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& c
 			= std::make_unique<Dx12Queue>(this->m_context, D3D12_COMMAND_LIST_TYPE_COPY);
 	}
 
-	this->m_renderTargetViewHeap = 
-		std::make_unique<StaticDescriptorHeap>(
-			this->m_context,
-			D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-			desc.RenderTargetViewHeapSize);
+	this->m_cpuDescriptorHeaps[DescritporHeapType::Srv_Cbv_Uav] =
+		std::make_unique<CpuDescriptorHeap>(
+			*this,
+			desc.ShaderResourceViewCpuHeapSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	this->m_depthStencilViewHeap =
-		std::make_unique<StaticDescriptorHeap>(
-			this->m_context,
-			D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
-			desc.DepthStencilViewHeapSize);
+	this->m_cpuDescriptorHeaps[DescritporHeapType::Sampler] =
+		std::make_unique<CpuDescriptorHeap>(
+			*this,
+			desc.SamplerHeapCpuSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
-	this->m_shaderResourceViewHeap=
-		std::make_unique<StaticDescriptorHeap>(
-			this->m_context,
-			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+	this->m_cpuDescriptorHeaps[DescritporHeapType::Rtv] =
+		std::make_unique<CpuDescriptorHeap>(
+			*this,
+			desc.RenderTargetViewHeapSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+	this->m_cpuDescriptorHeaps[DescritporHeapType::Dsv] =
+		std::make_unique<CpuDescriptorHeap>(
+			*this,
 			desc.DepthStencilViewHeapSize,
-			true);
+			D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	this->m_gpuDescritporHeaps[DescritporHeapType::Srv_Cbv_Uav] =
+		std::make_unique<GpuDescriptorHeap>(
+			*this,
+			desc.ShaderResourceViewGpuStaticHeapSize,
+			desc.ShaderResourceViewGpuDynamicHeapSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+
+	this->m_gpuDescritporHeaps[DescritporHeapType::Sampler] =
+		std::make_unique<GpuDescriptorHeap>(
+			*this,
+			desc.SamplerHeapGpuSize,
+			desc.SamplerHeapGpuSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+
 }
 
 Dx12Core::GraphicsDevice::~GraphicsDevice()
@@ -114,7 +136,12 @@ ICommandContext& Dx12Core::GraphicsDevice::BeginContext()
 		this->m_commandContexts[contextId]->Reset(this->GetGfxQueue()->GetLastCompletedFence());
 	}
 
-	this->m_commandContexts[contextId]->BindHeaps({ this->m_shaderResourceViewHeap.get(), this->m_samplerHeap.get() });
+	this->m_commandContexts[contextId]->BindHeaps(
+		{
+			this->m_gpuDescritporHeaps[Srv_Cbv_Uav].get(),
+			this->m_gpuDescritporHeaps[Sampler].get()
+		});
+
 	return *this->m_commandContexts[contextId];
 }
 
@@ -190,14 +217,14 @@ DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(ITexture* texture) 
 {
 	Texture* internal = SafeCast<Texture*>(texture);
 
-	return internal->Srv.GetIndex();
+	return internal->ResourceIndex;
 }
 
 DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(IBuffer* buffer) const
 {
 	Buffer* internal = SafeCast<Buffer*>(buffer);
 
-	return internal->Srv.GetIndex();
+	return internal->ResourceIndex;
 }
 
 TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
@@ -241,7 +268,7 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 	// Create Views
 	if (BindFlags::DepthStencil == (desc.Bindings | BindFlags::DepthStencil))
 	{
-		internal->Dsv = this->m_depthStencilViewHeap->AllocateDescriptor();
+		internal->Dsv = this->GetCpuHeap(Dsv)->Allocate(1);
 
 		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
 		dsvDesc.Format = desc.Format;
@@ -256,7 +283,9 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 	}
 	else if (BindFlags::ShaderResource == (desc.Bindings | BindFlags::ShaderResource))
 	{
-		internal->Srv = this->m_shaderResourceViewHeap->AllocateDescriptor();
+		internal->Srv = this->GetGpuResourceHeap()->Allocate(1);
+
+		internal->ResourceIndex = static_cast<DescriptorIndex>(internal->Srv.GetGpuHandle().ptr / internal->Srv.GetDescriptorSize());
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
@@ -291,7 +320,7 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTextureFromNative(TextureDesc desc
 
 	if ((internal->GetDesc().Bindings & BindFlags::RenderTarget) == BindFlags::RenderTarget)
 	{
-		internal->Rtv = this->m_renderTargetViewHeap->AllocateDescriptor();
+		internal->Rtv = this->GetCpuHeap(Rtv)->Allocate(1);
 		this->m_context.Device2->CreateRenderTargetView(internal->D3DResource, nullptr, internal->Rtv.GetCpuHandle());
 	}
 
@@ -341,7 +370,9 @@ BufferHandle Dx12Core::GraphicsDevice::CreateBuffer(BufferDesc desc)
 	}
 	else if (BindFlags::ShaderResource == (internal->GetDesc().BindFlags | BindFlags::ShaderResource))
 	{
-		internal->Srv = this->m_shaderResourceViewHeap->AllocateDescriptor();
+		internal->Srv = this->GetGpuResourceHeap()->Allocate(1);
+
+		internal->ResourceIndex = static_cast<DescriptorIndex>(internal->Srv.GetGpuHandle().ptr / internal->Srv.GetDescriptorSize());
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Buffer.FirstElement = 0;
@@ -453,7 +484,7 @@ GraphicsPipelineHandle Dx12Core::GraphicsDevice::CreateGraphicPipeline(GraphicsP
 	if (desc.UseShaderParameters && desc.ShaderParameters.Bindless)
 	{
 		graphicsPipelineState->HasBindlessParamaters = true;
-		graphicsPipelineState->bindlessResourceTable = this->m_shaderResourceViewHeap->GetGpuHandle();
+		graphicsPipelineState->bindlessResourceTable = this->GetGpuResourceHeap()->GetNativeHeap()->GetGPUDescriptorHandleForHeapStart();
 	}
 
 	return GraphicsPipelineHandle::Create(graphicsPipelineState.release());
