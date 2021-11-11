@@ -285,7 +285,10 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 	{
 		internal->Srv = this->GetGpuResourceHeap()->Allocate(1);
 
-		internal->ResourceIndex = static_cast<DescriptorIndex>(internal->Srv.GetGpuHandle().ptr / internal->Srv.GetDescriptorSize());
+		// Calculate index
+		auto heapStart = this->GetGpuResourceHeap()->GetNativeHeap()->GetCPUDescriptorHandleForHeapStart();
+
+		internal->ResourceIndex = static_cast<DescriptorIndex>((internal->Srv.GetCpuHandle().ptr - heapStart.ptr) / internal->Srv.GetDescriptorSize());
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
