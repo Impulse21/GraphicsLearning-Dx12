@@ -9,7 +9,6 @@ namespace Dx12Core
 {
 	class GraphicsDevice;
 
-
 	class Shader : public RefCounter<IShader>
 	{
 	public:
@@ -74,7 +73,7 @@ namespace Dx12Core
 		RefCountPtr<ID3D12Resource> D3DResource;
 
 		DescriptorHeapAllocation Srv = {};
-		DescriptorIndex ResourceIndex = INVALID_DESCRIPTOR_INDEX;
+		DescriptorIndex BindlessIndex = INVALID_DESCRIPTOR_INDEX;
 
 		D3D12_VERTEX_BUFFER_VIEW VertexView = {};
 		D3D12_INDEX_BUFFER_VIEW IndexView = {};
@@ -92,13 +91,13 @@ namespace Dx12Core
 		{
 		}
 
-		~Texture() = default;
+		~Texture();
 
 		RefCountPtr<ID3D12Resource> D3DResource = nullptr;
 		DescriptorHeapAllocation Rtv = {};
 		DescriptorHeapAllocation Dsv = {};
-		DescriptorHeapAllocation Srv = {};
-		DescriptorIndex ResourceIndex = INVALID_DESCRIPTOR_INDEX;
+		DescriptorHeapAllocation Srv = {}; // CPU Allocation
+		DescriptorIndex BindlessIndex = INVALID_DESCRIPTOR_INDEX;
 
 		GraphicsDevice* Device;
 

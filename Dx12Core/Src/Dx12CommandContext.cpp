@@ -3,7 +3,6 @@
 #include <pix.h>
 
 #include <optional>
-#include "Dx12DescriptorHeap.h"
 #include "DescriptorHeap.h"
 
 // helper function for texture subresource calculations
@@ -36,8 +35,6 @@ Dx12CommandContext::Dx12CommandContext(
 	this->m_internalList->SetName(debugName.c_str());
 	
 	this->m_uploadBuffer = std::make_unique<UploadBuffer>(device);
-
-	this->m_cbvSrvUavBindlessTable = D3D12_GPU_DESCRIPTOR_HANDLE();
 }
 
 void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
@@ -49,7 +46,6 @@ void Dx12Core::Dx12CommandContext::Reset(uint64_t completedFenceValue)
 	this->m_internalList->Reset(this->m_allocator, nullptr);
 
 	this->m_trackedResources = std::make_shared<ReferencedResources>();
-	this->m_cbvSrvUavBindlessTable = D3D12_GPU_DESCRIPTOR_HANDLE();
 	this->m_uploadBuffer->Reset();
 }
 
@@ -65,25 +61,6 @@ std::shared_ptr<ReferencedResources> Dx12Core::Dx12CommandContext::Executed(uint
 	auto retVal = this->m_trackedResources;
 	this->m_trackedResources.reset();
 	return retVal;
-}
-
-void Dx12Core::Dx12CommandContext::BindHeaps(std::array<StaticDescriptorHeap*, 2> const& shaderHeaps)
-{
-	std::vector<ID3D12DescriptorHeap*> heaps;
-	for (auto* heap : shaderHeaps)
-	{
-		if (heap)
-		{
-			if (heap->GetHeapType() == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
-			{
-				this->m_cbvSrvUavBindlessTable = heap->GetGpuHandle();
-			}
-
-			heaps.push_back(heap->GetNative());
-		}
-	}
-
-	this->m_internalList->SetDescriptorHeaps(heaps.size(), heaps.data());
 }
 
 void Dx12Core::Dx12CommandContext::BindHeaps(std::array<GpuDescriptorHeap*, 2> const& shaderHeaps)

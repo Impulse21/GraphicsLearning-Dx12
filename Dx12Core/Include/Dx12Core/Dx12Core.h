@@ -773,11 +773,13 @@ namespace Dx12Core
         uint32_t RenderTargetViewHeapSize = 1024;
         uint32_t DepthStencilViewHeapSize = 1024;
         uint32_t ShaderResourceViewCpuHeapSize = 1024;
-        uint32_t ShaderResourceViewGpuStaticHeapSize = 16384;
-        uint32_t ShaderResourceViewGpuDynamicHeapSize = 16384;
         uint32_t SamplerHeapCpuSize = 1024;
-        uint32_t SamplerHeapGpuSize = 1024;
 
+        // Teir 1 limit is 1,000,000
+        // https://docs.microsoft.com/en-us/windows/win32/direct3d12/hardware-support
+        uint32_t ShaderResourceViewGpuStaticHeapSize = 1000000 / 2;
+        uint32_t ShaderResourceViewGpuDynamicHeapSize = 1000000 / 2;
+        uint32_t SamplerHeapGpuSize = 1024;
     };
 
     struct SwapChainDesc

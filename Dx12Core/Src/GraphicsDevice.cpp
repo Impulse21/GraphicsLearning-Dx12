@@ -1,6 +1,6 @@
 #include "Dx12Core/GraphicsDevice.h"
 #include "Dx12Core/Dx12Queue.h"
-#include "Dx12DescriptorHeap.h"
+#include "BindlessDescriptorTable.h"
 
 // #include "d3d12shader.h"
 
@@ -49,13 +49,6 @@ Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& c
 			desc.DepthStencilViewHeapSize,
 			D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
-	this->m_gpuDescritporHeaps[DescritporHeapType::Srv_Cbv_Uav] =
-		std::make_unique<GpuDescriptorHeap>(
-			*this,
-			desc.ShaderResourceViewGpuStaticHeapSize,
-			desc.ShaderResourceViewGpuDynamicHeapSize,
-			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
 	this->m_gpuDescritporHeaps[DescritporHeapType::Sampler] =
 		std::make_unique<GpuDescriptorHeap>(
@@ -64,6 +57,18 @@ Dx12Core::GraphicsDevice::GraphicsDevice(GraphicsDeviceDesc desc, Dx12Context& c
 			desc.SamplerHeapGpuSize,
 			D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
 			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+
+	this->m_gpuDescritporHeaps[DescritporHeapType::Srv_Cbv_Uav] =
+		std::make_unique<GpuDescriptorHeap>(
+			*this,
+			desc.ShaderResourceViewGpuStaticHeapSize,
+			desc.ShaderResourceViewGpuDynamicHeapSize,
+			D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+
+	// Allocate all static descriptors as bindless, for convienice
+	DescriptorHeapAllocation bindlessAllocation = this->GetGpuResourceHeap()->Allocate(desc.ShaderResourceViewGpuStaticHeapSize);
+	this->m_bindlessDescritporTable = std::make_unique<BindlessDescriptorTable>(std::move(bindlessAllocation));
 
 }
 
@@ -217,14 +222,14 @@ DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(ITexture* texture) 
 {
 	Texture* internal = SafeCast<Texture*>(texture);
 
-	return internal->ResourceIndex;
+	return internal->BindlessIndex;
 }
 
 DescriptorIndex Dx12Core::GraphicsDevice::GetDescritporIndex(IBuffer* buffer) const
 {
 	Buffer* internal = SafeCast<Buffer*>(buffer);
 
-	return internal->ResourceIndex;
+	return internal->BindlessIndex;
 }
 
 TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
@@ -283,13 +288,6 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 	}
 	else if (BindFlags::ShaderResource == (desc.Bindings | BindFlags::ShaderResource))
 	{
-		internal->Srv = this->GetGpuResourceHeap()->Allocate(1);
-
-		// Calculate index
-		auto heapStart = this->GetGpuResourceHeap()->GetNativeHeap()->GetCPUDescriptorHandleForHeapStart();
-
-		internal->ResourceIndex = static_cast<DescriptorIndex>((internal->Srv.GetCpuHandle().ptr - heapStart.ptr) / internal->Srv.GetDescriptorSize());
-
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = desc.Format; // TODO: handle SRGB format
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -306,10 +304,22 @@ TextureHandle Dx12Core::GraphicsDevice::CreateTexture(TextureDesc desc)
 			srvDesc.Texture2D.MipLevels = internal->GetDesc().MipLevels;
 		}
 
+		internal->Srv = this->GetCpuHeap(Srv_Cbv_Uav)->Allocate(1);
 		this->m_context.Device2->CreateShaderResourceView(
 			internal->D3DResource,
 			&srvDesc,
 			internal->Srv.GetCpuHandle());
+
+		// Copy Descriptor to Bindless since we are creating a texture as a shader resource view
+		internal->BindlessIndex = this->m_bindlessDescritporTable->Allocate();
+		if (internal->BindlessIndex != INVALID_DESCRIPTOR_INDEX)
+		{
+			this->m_context.Device2->CopyDescriptorsSimple(
+				1,
+				this->m_bindlessDescritporTable->GetCpuHandle(internal->BindlessIndex),
+				internal->Srv.GetCpuHandle(),
+				D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		}
 	}
 
 	return TextureHandle::Create(internal.release());
@@ -375,7 +385,7 @@ BufferHandle Dx12Core::GraphicsDevice::CreateBuffer(BufferDesc desc)
 	{
 		internal->Srv = this->GetGpuResourceHeap()->Allocate(1);
 
-		internal->ResourceIndex = static_cast<DescriptorIndex>(internal->Srv.GetGpuHandle().ptr / internal->Srv.GetDescriptorSize());
+		internal->BindlessIndex = static_cast<DescriptorIndex>(internal->Srv.GetGpuHandle().ptr / internal->Srv.GetDescriptorSize());
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Buffer.FirstElement = 0;

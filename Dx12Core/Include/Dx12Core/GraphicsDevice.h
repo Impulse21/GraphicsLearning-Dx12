@@ -6,10 +6,6 @@
 
 #include "Dx12Core.h"
 #include "Dx12Common.h"
-#include "ResouceIdOwner.h"
-
-// -- depericated ---
-#include "Dx12DescriptorHeap.h"
 #include "DescriptorHeap.h"
 
 #include "Dx12CommandContext.h"
@@ -38,6 +34,7 @@ namespace Dx12Core
 		NumTypes
 	};
 
+	class BindlessDescriptorTable;
 	class StaleResourceWrapper
 	{
 	public:
@@ -134,6 +131,11 @@ namespace Dx12Core
 		template<typename ResourceType>
 		void SafeReleaseObject(ResourceType&& resource)
 		{
+			if (!this->GetGfxQueue())
+			{
+				return;
+			}
+
 			auto staleWrapper = StaleResourceWrapper::Create(std::move(resource));
 
 			// I will need to update this to support other queues but for now, not a big deal as I only support graphics queue
@@ -162,6 +164,8 @@ namespace Dx12Core
 			return this->m_gpuDescritporHeaps[Sampler].get();
 		}
 
+		BindlessDescriptorTable* GetBindlessTable() { return this->m_bindlessDescritporTable.get(); }
+
 	private:
 		RootSignatureHandle CreateRootSignature(RootSignatureDesc& desc);
 		RootSignatureHandle CreateRootSignature(
@@ -189,6 +193,7 @@ namespace Dx12Core
 
 		std::array<std::unique_ptr<CpuDescriptorHeap>, DescritporHeapType::NumTypes> m_cpuDescriptorHeaps;
 		std::array<std::unique_ptr<GpuDescriptorHeap>, 2> m_gpuDescritporHeaps;
+		std::unique_ptr<BindlessDescriptorTable> m_bindlessDescritporTable;
 
 		SwapChainDesc m_swapChainDesc;
 

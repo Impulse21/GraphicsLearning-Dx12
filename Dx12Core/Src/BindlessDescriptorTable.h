@@ -2,36 +2,36 @@
 
 #include "Dx12Core/Dx12Common.h"
 
-#include "DescriptorAllocation.h"
+#include "DescriptorHeap.h"
 
 namespace Dx12Core
 {
-
-	class StaticDescriptorHeap
+	class BindlessDescriptorTable
 	{
 	public:
-		StaticDescriptorHeap(
-			Dx12Context const& context,
-			D3D12_DESCRIPTOR_HEAP_TYPE heapType,
-			uint32_t numDescriptorsInHeap,
-			bool isShaderVisible = false);
+		BindlessDescriptorTable(DescriptorHeapAllocation&& allocation)
+			: m_allocation(std::move(allocation))
+		{}
+		
+		// TODO Free allocation
+		~BindlessDescriptorTable();
 
-		operator ID3D12DescriptorHeap* () const { return this->m_heap; }
-		ID3D12DescriptorHeap* GetNative() const { return this->m_heap; }
+		BindlessDescriptorTable(const BindlessDescriptorTable&) = delete;
+		BindlessDescriptorTable(BindlessDescriptorTable&&) = delete;
+		BindlessDescriptorTable& operator = (const BindlessDescriptorTable&) = delete;
+		BindlessDescriptorTable& operator = (BindlessDescriptorTable&&) = delete;
 
-		bool IsShaderVisible() const { return this->m_isShaderVisible; }
+	public:
+		DescriptorIndex Allocate();
+		void Free(DescriptorIndex index);
 
-		DescriptorAllocation AllocateDescriptor();
-		void Release(DescriptorAllocation&& allocation);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(DescriptorIndex index = 0);
-		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(DescriptorIndex index = 0);
-
-		D3D12_DESCRIPTOR_HEAP_TYPE GetHeapType() const { return this->m_heapType; }
+		D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHandle(DescriptorIndex index) { return this->m_allocation.GetCpuHandle(index); }
+		D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(DescriptorIndex index) { return this->m_allocation.GetGpuHandle(index); }
 
 	private:
-		struct DescriptorIndexPool
+		class DescriptorIndexPool
 		{
+		public:
 			DescriptorIndexPool() = default;
 			DescriptorIndexPool(size_t numIndices)
 			{
@@ -77,17 +77,8 @@ namespace Dx12Core
 		};
 
 	private:
-		const Dx12Context& m_context;
-		const D3D12_DESCRIPTOR_HEAP_TYPE m_heapType;
-		const bool m_isShaderVisible;
-		D3D12_DESCRIPTOR_HEAP_DESC m_desc;
-
+		DescriptorHeapAllocation m_allocation;
 		DescriptorIndexPool m_descriptorIndexPool;
-		RefCountPtr<ID3D12DescriptorHeap> m_heap;
 
-		D3D12_CPU_DESCRIPTOR_HANDLE	m_cpuStartHandle = { 0 };
-		D3D12_GPU_DESCRIPTOR_HANDLE m_gpuStartHandle = { 0 };
-		UINT m_descriptorHandleIncrementSize;
 	};
 }
-

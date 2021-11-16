@@ -26,14 +26,12 @@ set(dx12_core_src_files
     Src/Dx12Factory.cpp
     Src/GraphicsDevice.cpp
     Src/Dx12Queue.cpp
-    Src/Dx12DescriptorHeap.h
-    Src/Dx12DescriptorHeap.cpp
+    Src/BindlessDescriptorTable.h
+    Src/BindlessDescriptorTable.cpp
     Src/Dx12CommandAllocatorPool.cpp
     Src/Dx12Resources.h
     Src/Dx12CommandContext.h
     Src/Dx12CommandContext.cpp
-    Src/DescriptorAllocation.h
-    Src/DescriptorAllocation.cpp
     Src/Dx12UploadBuffer.h
     Src/Dx12UploadBuffer.cpp
     Src/ResourceStore.cpp

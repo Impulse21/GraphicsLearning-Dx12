@@ -33,7 +33,6 @@ namespace Dx12Core
 
 		ID3D12GraphicsCommandList* GetInternal() { return this->m_internalList; }
 
-		void BindHeaps(std::array<StaticDescriptorHeap*, 2> const& shaderHeaps);
 		void BindHeaps(std::array<GpuDescriptorHeap*, 2> const& shaderHeaps);
 
 		// -- Wrapped Commands ---
@@ -84,8 +83,6 @@ namespace Dx12Core
 		virtual void EndMarker();
 
 	private:
-		D3D12_GPU_DESCRIPTOR_HANDLE m_cbvSrvUavBindlessTable;
-
 		RefCountPtr<ID3D12Device2> m_device;
 		RefCountPtr<ID3D12GraphicsCommandList> m_internalList;
 		ID3D12CommandAllocator* m_allocator;

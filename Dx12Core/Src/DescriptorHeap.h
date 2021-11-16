@@ -76,7 +76,7 @@ namespace Dx12Core
 		{
 			if (!this->IsNull() && this->m_descriptorAllocator)
 			{
-				this->m_descriptorAllocator->Free(std::move(*this));
+				// this->m_descriptorAllocator->Free(std::move(*this));
 			}
 		}
 
